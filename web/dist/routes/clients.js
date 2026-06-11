@@ -9,22 +9,23 @@ const pool_1 = require("../db/pool");
 const pagination_1 = require("../utils/pagination");
 const errorHandler_1 = require("../middleware/errorHandler");
 const clientObject_1 = require("../schemas/clientObject");
+const fields_1 = require("../schemas/fields");
 const clientObjects_1 = require("../services/clientObjects");
 exports.clientsRouter = (0, express_1.Router)();
 exports.clientsRouter.use(auth_1.authenticate);
 const clientSchema = zod_1.z.object({
     name: zod_1.z.string().min(1).max(255),
     client_type: zod_1.z.enum(['company', 'private']).default('company'),
-    address: zod_1.z.string().optional(),
-    city: zod_1.z.string().optional(),
-    postal_code: zod_1.z.string().optional(),
+    address: fields_1.optionalString,
+    city: fields_1.optionalString,
+    postal_code: fields_1.optionalString,
     country: zod_1.z.string().length(2).default('LV'),
     latitude: zod_1.z.number().min(-90).max(90).optional(),
     longitude: zod_1.z.number().min(-180).max(180).optional(),
-    phone: zod_1.z.string().optional(),
-    email: zod_1.z.string().email().optional().or(zod_1.z.literal('')),
-    representative: zod_1.z.string().optional(),
-    notes: zod_1.z.string().optional(),
+    phone: fields_1.optionalString,
+    email: fields_1.optionalEmail,
+    representative: fields_1.optionalString,
+    notes: fields_1.optionalString,
 });
 const createClientSchema = clientSchema.extend({
     objects: zod_1.z.array(clientObject_1.clientObjectInputSchema).optional(),
