@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { VoiceInputButton } from '../components/ai/VoiceInputButton';
@@ -36,11 +36,6 @@ export function NewIncidentPage() {
     }
   }, [clientDetail, location.objectId]);
 
-  const hasActiveObjects = useMemo(() => {
-    if (!clientDetail?.data.objects) return null;
-    return clientDetail.data.objects.some((o) => o.status !== 'closed');
-  }, [clientDetail]);
-
   const handleVoiceResult = (
     transcript: string,
     extraction?: Awaited<ReturnType<typeof aiApi.voiceToIncident>>['data']
@@ -73,9 +68,13 @@ export function NewIncidentPage() {
       return;
     }
 
-    if (hasActiveObjects !== false && !location.objectId) {
-      setError('Izvēlieties objektu');
-      return;
+    if (!location.objectId) {
+      const activeCount =
+        clientDetail?.data.objects?.filter((o) => o.status !== 'closed').length ?? 0;
+      if (activeCount > 0) {
+        setError('Izvēlieties objektu');
+        return;
+      }
     }
 
     setLoading(true);

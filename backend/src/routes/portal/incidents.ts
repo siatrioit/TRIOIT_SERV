@@ -70,7 +70,7 @@ portalIncidentsRouter.get('/', async (req, res, next) => {
       await assertCanAccessObject(access, objectId);
     }
 
-    const { clause, params } = buildIncidentScopeClause(access);
+    const { clause, params } = await buildIncidentScopeClause(access);
     let where = `WHERE ${clause}`;
     const queryParams = [...params];
 

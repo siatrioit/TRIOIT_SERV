@@ -34,9 +34,9 @@ export async function getPortalUserAccess(portalUserId: string): Promise<PortalA
 }
 
 /** SQL nosacījums — kuri atgadījumi redzami portāla lietotājam */
-export function buildIncidentScopeClause(
+export async function buildIncidentScopeClause(
   grants: PortalAccessGrant[]
-): { clause: string; params: unknown[] } {
+): Promise<{ clause: string; params: unknown[] }> {
   if (grants.length === 0) {
     return { clause: '1 = 0', params: [] };
   }
@@ -53,35 +53,26 @@ export function buildIncidentScopeClause(
     params.push(clientId);
   }
 
-  const objectScopeIds = [
-    ...new Set(
-      grants
-        .filter((g) => g.scope === 'object' && g.object_id)
-        .map((g) => g.object_id as string)
-    ),
-  ];
+  // Bez klienta pieejas — tikai konkrētu objektu izsaukumi (arī admin panelī izveidotie)
+  if (clientScopeIds.length === 0) {
+    const accessibleObjects = await listAccessibleObjects(grants);
+    const objectIds = accessibleObjects.map((o) => o.id);
 
-  if (objectScopeIds.length === 1) {
-    parts.push('i.object_id = ?');
-    params.push(objectScopeIds[0]);
-  } else if (objectScopeIds.length > 1) {
-    parts.push(`i.object_id IN (${objectScopeIds.map(() => '?').join(', ')})`);
-    params.push(...objectScopeIds);
-  }
+    if (objectIds.length === 1) {
+      parts.push('i.object_id = ?');
+      params.push(objectIds[0]);
+    } else if (objectIds.length > 1) {
+      parts.push(`i.object_id IN (${objectIds.map(() => '?').join(', ')})`);
+      params.push(...objectIds);
+    }
 
-  // Objekta pieeja — arī klienta vispārīgie izsaukumi bez konkrēta objekta
-  const objectOnlyClientIds = [
-    ...new Set(
-      grants
-        .filter((g) => g.scope === 'object')
-        .map((g) => g.client_id)
-        .filter((cid) => !clientScopeIds.includes(cid))
-    ),
-  ];
-
-  for (const clientId of objectOnlyClientIds) {
-    parts.push('(i.client_id = ? AND i.object_id IS NULL)');
-    params.push(clientId);
+    const objectClientIds = [
+      ...new Set(accessibleObjects.map((o) => o.client_id)),
+    ];
+    for (const clientId of objectClientIds) {
+      parts.push('(i.client_id = ? AND i.object_id IS NULL)');
+      params.push(clientId);
+    }
   }
 
   return { clause: parts.length ? `(${parts.join(' OR ')})` : '1 = 0', params };
@@ -91,7 +82,7 @@ export async function assertCanViewIncident(
   grants: PortalAccessGrant[],
   incidentId: string
 ): Promise<void> {
-  const { clause, params } = buildIncidentScopeClause(grants);
+  const { clause, params } = await buildIncidentScopeClause(grants);
   const row = await queryOne(
     `SELECT i.id FROM incidents i WHERE i.id = ? AND ${clause}`,
     [incidentId, ...params]
