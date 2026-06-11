@@ -4,6 +4,7 @@ exports.getPortalUserAccess = getPortalUserAccess;
 exports.buildIncidentScopeClause = buildIncidentScopeClause;
 exports.assertCanViewIncident = assertCanViewIncident;
 exports.assertCanCreateIncident = assertCanCreateIncident;
+exports.assertCanAccessObject = assertCanAccessObject;
 exports.listAccessibleObjects = listAccessibleObjects;
 const pool_1 = require("../db/pool");
 const errorHandler_1 = require("../middleware/errorHandler");
@@ -16,21 +17,43 @@ async function getPortalUserAccess(portalUserId) {
      WHERE pa.portal_user_id = ? AND pa.is_active = 1
        AND EXISTS (SELECT 1 FROM portal_users pu WHERE pu.id = ? AND pu.is_active = 1)`, [portalUserId, portalUserId]);
 }
+/** SQL nosacījums — kuri atgadījumi redzami portāla lietotājam */
 function buildIncidentScopeClause(grants) {
     if (grants.length === 0) {
         return { clause: '1 = 0', params: [] };
     }
     const parts = [];
     const params = [];
-    for (const grant of grants) {
-        if (grant.scope === 'client') {
-            parts.push('i.client_id = ?');
-            params.push(grant.client_id);
-        }
-        else if (grant.object_id) {
-            parts.push('i.object_id = ?');
-            params.push(grant.object_id);
-        }
+    const clientScopeIds = [
+        ...new Set(grants.filter((g) => g.scope === 'client').map((g) => g.client_id)),
+    ];
+    for (const clientId of clientScopeIds) {
+        parts.push('i.client_id = ?');
+        params.push(clientId);
+    }
+    const objectScopeIds = [
+        ...new Set(grants
+            .filter((g) => g.scope === 'object' && g.object_id)
+            .map((g) => g.object_id)),
+    ];
+    if (objectScopeIds.length === 1) {
+        parts.push('i.object_id = ?');
+        params.push(objectScopeIds[0]);
+    }
+    else if (objectScopeIds.length > 1) {
+        parts.push(`i.object_id IN (${objectScopeIds.map(() => '?').join(', ')})`);
+        params.push(...objectScopeIds);
+    }
+    // Objekta pieeja — arī klienta vispārīgie izsaukumi bez konkrēta objekta
+    const objectOnlyClientIds = [
+        ...new Set(grants
+            .filter((g) => g.scope === 'object')
+            .map((g) => g.client_id)
+            .filter((cid) => !clientScopeIds.includes(cid))),
+    ];
+    for (const clientId of objectOnlyClientIds) {
+        parts.push('(i.client_id = ? AND i.object_id IS NULL)');
+        params.push(clientId);
     }
     return { clause: parts.length ? `(${parts.join(' OR ')})` : '1 = 0', params };
 }
@@ -56,6 +79,12 @@ async function assertCanCreateIncident(grants, clientId, objectId) {
     });
     if (!allowed) {
         throw new errorHandler_1.AppError(403, 'Nav tiesību reģistrēt izsaukumu šim objektam', 'FORBIDDEN');
+    }
+}
+async function assertCanAccessObject(grants, objectId) {
+    const objects = await listAccessibleObjects(grants);
+    if (!objects.some((o) => o.id === objectId)) {
+        throw new errorHandler_1.AppError(403, 'Nav pieejas šim objektam', 'FORBIDDEN');
     }
 }
 async function listAccessibleObjects(grants) {

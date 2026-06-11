@@ -32,9 +32,17 @@ exports.portalIncidentsRouter.get('/', async (req, res, next) => {
         const { access, portalUserId } = req.portalUser;
         const { page, limit, offset } = (0, pagination_1.parsePagination)(req.query);
         const status = req.query.status;
+        const objectId = req.query.object_id;
+        if (objectId) {
+            await (0, portalScope_1.assertCanAccessObject)(access, objectId);
+        }
         const { clause, params } = (0, portalScope_1.buildIncidentScopeClause)(access);
         let where = `WHERE ${clause}`;
         const queryParams = [...params];
+        if (objectId) {
+            where += ' AND i.object_id = ?';
+            queryParams.push(objectId);
+        }
         if (status) {
             where += ' AND i.status = ?';
             queryParams.push(status);
