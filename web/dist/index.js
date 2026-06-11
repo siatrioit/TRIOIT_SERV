@@ -66,11 +66,10 @@ if (staticDir) {
     });
 }
 app.use(errorHandler_1.errorHandler);
-// cPanel Passenger gaida module.exports, ne app.listen()
-if (process.env.PASSENGER_APP_ENV) {
-    module.exports = app;
-}
-else {
+// cPanel Passenger: TIKAI module.exports — NEDRĪKST app.listen()!
+module.exports = app;
+// Lokālai izstrādei: LOCAL_DEV=true npm run start
+if (process.env.LOCAL_DEV === 'true') {
     app.listen(PORT, () => {
         console.log(`TRIO-SERV running on port ${PORT}`);
         if (staticDir)
