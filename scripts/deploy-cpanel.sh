@@ -2,11 +2,11 @@
 # Build script — izpildās uz servera (.cpanel.yml Deploy HEAD)
 set -e
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT"
+ROOT="/home2/trioitlv/serv.trioit.lv/repo"
+cd "$ROOT" || exit 1
 
 # cPanel Node.js virtuālā vide (20.x, pēc tam 18.x fallback)
-NODEVENV_BASE="$HOME/nodevenv/serv.trioit.lv/repo/backend"
+NODEVENV_BASE="/home2/trioitlv/nodevenv/serv.trioit.lv/repo/backend"
 for VER in 20 22 18; do
   if [ -f "$NODEVENV_BASE/$VER/bin/activate" ]; then
     # shellcheck disable=SC1090
