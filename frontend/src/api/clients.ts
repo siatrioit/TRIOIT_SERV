@@ -68,6 +68,21 @@ export const clientsApi = {
 
   update: (id: string, data: Partial<ClientPayload>) =>
     api.put<{ data: Client }>(`/clients/${id}`, data),
+
+  createObject: (clientId: string, data: ClientObjectInput) =>
+    api.post<{ data: ClientObjectInput & { id: string } }>(
+      `/clients/${clientId}/objects`,
+      sanitizeClientObject(data)
+    ),
+
+  updateObject: (clientId: string, objectId: string, data: ClientObjectInput) =>
+    api.put<{ data: ClientObjectInput & { id: string } }>(
+      `/clients/${clientId}/objects/${objectId}`,
+      sanitizeClientObject(data)
+    ),
+
+  deleteObject: (clientId: string, objectId: string) =>
+    api.delete<{ success: boolean }>(`/clients/${clientId}/objects/${objectId}`),
 };
 
 /** Tīrs API payload — bez DB papildlaukiem un tukšām virknēm */

@@ -37,7 +37,7 @@ export function ClientsPage() {
           </Link>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0 xl:grid-cols-3">
           {data?.data.map((client) => (
             <Link
               key={client.id}

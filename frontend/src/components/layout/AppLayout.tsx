@@ -10,7 +10,7 @@ export function AppLayout() {
         <AppBrand />
       </header>
 
-      <main className="flex-1 px-4 py-4 max-w-lg mx-auto w-full">
+      <main className="flex-1 px-4 py-4 w-full max-w-lg lg:max-w-4xl mx-auto">
         <Outlet />
       </main>
 

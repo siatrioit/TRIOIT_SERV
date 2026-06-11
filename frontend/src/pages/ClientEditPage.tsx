@@ -1,13 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import {
   clientsApi,
-  emptyObject,
-  sanitizeClientObject,
   type ClientObjectInput,
   type ClientType,
 } from '../api/clients';
+import { ClientObjectList } from '../components/clients/ClientObjectList';
+import { ClientObjectModal } from '../components/clients/ClientObjectModal';
+
+type ModalState =
+  | { open: false }
+  | { open: true; mode: 'create' }
+  | { open: true; mode: 'edit'; object: ClientObjectInput };
 
 export function ClientEditPage() {
   const { id } = useParams();
@@ -15,8 +20,9 @@ export function ClientEditPage() {
   const isNew = !id || id === 'new';
 
   const [loading, setLoading] = useState(!isNew);
-  const [saving, setSaving] = useState(false);
+  const [savingClient, setSavingClient] = useState(false);
   const [error, setError] = useState('');
+  const [clientMessage, setClientMessage] = useState('');
 
   const [name, setName] = useState('');
   const [clientType, setClientType] = useState<ClientType>('company');
@@ -27,100 +33,73 @@ export function ClientEditPage() {
   const [city, setCity] = useState('');
   const [postalCode, setPostalCode] = useState('');
   const [notes, setNotes] = useState('');
-  const [objects, setObjects] = useState<ClientObjectInput[]>([emptyObject(true)]);
+  const [objects, setObjects] = useState<ClientObjectInput[]>([]);
+  const [modal, setModal] = useState<ModalState>({ open: false });
+
+  const clientId = isNew ? null : id!;
+
+  const loadClient = useCallback(async () => {
+    if (!clientId) return;
+    setLoading(true);
+    try {
+      const res = await clientsApi.get(clientId);
+      const c = res.data;
+      setName(c.name);
+      setClientType(c.client_type);
+      setPhone(c.phone || '');
+      setEmail(c.email || '');
+      setRepresentative(c.representative || '');
+      setAddress(c.address || '');
+      setCity(c.city || '');
+      setPostalCode(c.postal_code || '');
+      setNotes(c.notes || '');
+      setObjects(
+        (c.objects || []).map((o) => ({
+          ...o,
+          is_primary: Boolean(o.is_primary),
+        }))
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Neizdevās ielādēt');
+    } finally {
+      setLoading(false);
+    }
+  }, [clientId]);
 
   useEffect(() => {
-    if (isNew) return;
-    clientsApi
-      .get(id!)
-      .then((res) => {
-        const c = res.data;
-        setName(c.name);
-        setClientType(c.client_type);
-        setPhone(c.phone || '');
-        setEmail(c.email || '');
-        setRepresentative(c.representative || '');
-        setAddress(c.address || '');
-        setCity(c.city || '');
-        setPostalCode(c.postal_code || '');
-        setNotes(c.notes || '');
-        setObjects(
-          c.objects?.length
-            ? c.objects.map((o) => ({
-                ...o,
-                is_primary: Boolean(o.is_primary),
-              }))
-            : [emptyObject(true)]
-        );
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Neizdevās ielādēt'))
-      .finally(() => setLoading(false));
-  }, [id, isNew]);
+    if (!isNew) loadClient();
+  }, [isNew, loadClient]);
 
-  const updateObject = (index: number, patch: Partial<ClientObjectInput>) => {
-    setObjects((prev) =>
-      prev.map((obj, i) => (i === index ? { ...obj, ...patch } : obj))
-    );
-  };
+  const clientPayload = () => ({
+    name: name.trim(),
+    client_type: clientType,
+    phone: phone.trim() || undefined,
+    email: email.trim() || undefined,
+    representative: representative.trim() || undefined,
+    address: address.trim() || undefined,
+    city: city.trim() || undefined,
+    postal_code: postalCode.trim() || undefined,
+    country: 'LV' as const,
+    notes: notes.trim() || undefined,
+  });
 
-  const setPrimaryObject = (index: number) => {
-    setObjects((prev) =>
-      prev.map((obj, i) => ({ ...obj, is_primary: i === index }))
-    );
-  };
-
-  const addObject = () => {
-    setObjects((prev) => [...prev, emptyObject(prev.length === 0)]);
-  };
-
-  const removeObject = (index: number) => {
-    setObjects((prev) => {
-      if (prev.length <= 1) return prev;
-      const next = prev.filter((_, i) => i !== index);
-      if (!next.some((o) => o.is_primary)) next[0].is_primary = true;
-      return [...next];
-    });
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSaveClient = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
-    const validObjects = objects
-      .map(sanitizeClientObject)
-      .filter((o) => o.name.length > 0);
-
-    if (validObjects.length === 0) {
-      setError('Pievieno vismaz vienu objektu ar nosaukumu');
+    setClientMessage('');
+    if (!name.trim()) {
+      setError('Klienta nosaukums ir obligāts');
       return;
     }
 
-    if (!validObjects.some((o) => o.is_primary)) {
-      validObjects[0].is_primary = true;
-    }
-
-    setSaving(true);
+    setSavingClient(true);
     try {
-      const payload = {
-        name: name.trim(),
-        client_type: clientType,
-        phone: phone || undefined,
-        email: email || undefined,
-        representative: representative || undefined,
-        address: address || undefined,
-        city: city || undefined,
-        postal_code: postalCode || undefined,
-        country: 'LV',
-        notes: notes || undefined,
-        objects: validObjects,
-      };
-
       if (isNew) {
-        const res = await clientsApi.create(payload);
+        const res = await clientsApi.create(clientPayload());
         navigate(`/clients/${res.data.id}`, { replace: true });
       } else {
-        await clientsApi.update(id!, payload);
-        navigate('/clients');
+        await clientsApi.update(clientId!, clientPayload());
+        setClientMessage('Klienta dati saglabāti');
       }
     } catch (err) {
       setError(
@@ -131,8 +110,35 @@ export function ClientEditPage() {
             : 'Saglabāšana neizdevās'
       );
     } finally {
-      setSaving(false);
+      setSavingClient(false);
     }
+  };
+
+  const reloadObjects = async () => {
+    if (!clientId) return;
+    const res = await clientsApi.get(clientId);
+    setObjects(
+      (res.data.objects || []).map((o) => ({
+        ...o,
+        is_primary: Boolean(o.is_primary),
+      }))
+    );
+  };
+
+  const handleSaveObject = async (data: ClientObjectInput) => {
+    if (!clientId) return;
+    if (modal.open && modal.mode === 'edit' && modal.object.id) {
+      await clientsApi.updateObject(clientId, modal.object.id, data);
+    } else {
+      await clientsApi.createObject(clientId, data);
+    }
+    await reloadObjects();
+  };
+
+  const handleDeleteObject = async () => {
+    if (!clientId || !modal.open || modal.mode !== 'edit' || !modal.object.id) return;
+    await clientsApi.deleteObject(clientId, modal.object.id);
+    await reloadObjects();
   };
 
   if (loading) {
@@ -140,32 +146,37 @@ export function ClientEditPage() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 pb-8">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 pb-8">
+      <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">
-          {isNew ? 'Jauns klients' : 'Rediģēt klientu'}
+          {isNew ? 'Jauns klients' : name || 'Klienta karte'}
         </h2>
-        <Link to="/clients" className="text-primary-600 text-sm font-medium">
-          ← Atpakaļ
+        <Link to="/clients" className="text-primary-600 text-sm font-medium shrink-0">
+          ← Klienti
         </Link>
       </div>
 
       {error && (
         <div className="bg-red-50 text-red-700 px-4 py-3 rounded-xl text-sm">{error}</div>
       )}
+      {clientMessage && (
+        <div className="bg-green-50 text-green-800 px-4 py-3 rounded-xl text-sm">
+          {clientMessage}
+        </div>
+      )}
 
-      <section className="card space-y-4">
-        <h3 className="font-medium text-gray-800">Klienta dati</h3>
+      <form onSubmit={handleSaveClient} className="card space-y-4 lg:grid lg:grid-cols-2 lg:gap-x-6 lg:gap-y-4">
+        <h3 className="font-medium text-gray-800 lg:col-span-2">Klienta dati</h3>
 
         <input
-          className="input-field"
+          className="input-field lg:col-span-2"
           placeholder="Nosaukums *"
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
         />
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 lg:col-span-2">
           <button
             type="button"
             className={`rounded-xl border px-4 py-3 text-sm font-medium ${
@@ -204,157 +215,70 @@ export function ClientEditPage() {
           onChange={(e) => setEmail(e.target.value)}
         />
         <input
-          className="input-field"
+          className="input-field lg:col-span-2"
           placeholder="Pārstāvis / kontaktpersona"
           value={representative}
           onChange={(e) => setRepresentative(e.target.value)}
         />
         <input
-          className="input-field"
+          className="input-field lg:col-span-2"
           placeholder="Juridiskā / galvenā adrese (ne obligāta)"
           value={address}
           onChange={(e) => setAddress(e.target.value)}
         />
-        <div className="grid grid-cols-2 gap-3">
-          <input
-            className="input-field"
-            placeholder="Pilsēta"
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-          />
-          <input
-            className="input-field"
-            placeholder="Indekss"
-            value={postalCode}
-            onChange={(e) => setPostalCode(e.target.value)}
-          />
-        </div>
+        <input
+          className="input-field"
+          placeholder="Pilsēta"
+          value={city}
+          onChange={(e) => setCity(e.target.value)}
+        />
+        <input
+          className="input-field"
+          placeholder="Indekss"
+          value={postalCode}
+          onChange={(e) => setPostalCode(e.target.value)}
+        />
         <textarea
-          className="input-field min-h-[80px]"
+          className="input-field min-h-[80px] lg:col-span-2"
           placeholder="Piezīmes par klientu"
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
         />
-      </section>
 
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-medium text-gray-800">Objekti</h3>
-            <p className="text-sm text-gray-500">
-              Vietas, kur sniedzat pakalpojumus (1 vai vairākas)
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={addObject}
-            className="text-primary-600 text-sm font-medium"
-          >
-            + Objekts
+        <div className="lg:col-span-2 pt-1">
+          <button type="submit" className="btn-primary w-full sm:w-auto" disabled={savingClient}>
+            {savingClient ? 'Saglabā...' : isNew ? 'Izveidot klientu' : 'Saglabāt klienta datus'}
           </button>
         </div>
+      </form>
 
-        {objects.map((obj, index) => (
-          <div key={obj.id || index} className="card space-y-3 border-primary-100">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-medium text-gray-700">
-                Objekts {index + 1}
-                {obj.is_primary && (
-                  <span className="ml-2 text-xs text-primary-600">(galvenais)</span>
-                )}
-              </span>
-              <div className="flex gap-3">
-                {!obj.is_primary && (
-                  <button
-                    type="button"
-                    className="text-xs text-primary-600"
-                    onClick={() => setPrimaryObject(index)}
-                  >
-                    Galvenais
-                  </button>
-                )}
-                {objects.length > 1 && (
-                  <button
-                    type="button"
-                    className="text-xs text-red-500"
-                    onClick={() => removeObject(index)}
-                  >
-                    Dzēst
-                  </button>
-                )}
-              </div>
-            </div>
+      {!isNew && (
+        <ClientObjectList
+          objects={objects}
+          disabled={!clientId}
+          onAdd={() => setModal({ open: true, mode: 'create' })}
+          onOpen={(object) => setModal({ open: true, mode: 'edit', object })}
+        />
+      )}
 
-            <input
-              className="input-field"
-              placeholder="Objekta nosaukums * (piem. Veikals Rīgā)"
-              value={obj.name}
-              onChange={(e) => updateObject(index, { name: e.target.value })}
-            />
-            <input
-              className="input-field"
-              placeholder="Objekta kods (iekšējais)"
-              value={obj.object_code || ''}
-              onChange={(e) => updateObject(index, { object_code: e.target.value })}
-            />
-            <input
-              className="input-field"
-              placeholder="Adrese"
-              value={obj.address || ''}
-              onChange={(e) => updateObject(index, { address: e.target.value })}
-            />
-            <div className="grid grid-cols-2 gap-3">
-              <input
-                className="input-field"
-                placeholder="Pilsēta"
-                value={obj.city || ''}
-                onChange={(e) => updateObject(index, { city: e.target.value })}
-              />
-              <input
-                className="input-field"
-                placeholder="Indekss"
-                value={obj.postal_code || ''}
-                onChange={(e) => updateObject(index, { postal_code: e.target.value })}
-              />
-            </div>
-            <input
-              className="input-field"
-              placeholder="Kontaktpersona objektā"
-              value={obj.contact_name || ''}
-              onChange={(e) => updateObject(index, { contact_name: e.target.value })}
-            />
-            <input
-              className="input-field"
-              placeholder="Tālrunis objektā"
-              value={obj.contact_phone || ''}
-              onChange={(e) => updateObject(index, { contact_phone: e.target.value })}
-            />
-            <input
-              type="email"
-              className="input-field"
-              placeholder="E-pasts objektā"
-              value={obj.contact_email || ''}
-              onChange={(e) => updateObject(index, { contact_email: e.target.value })}
-            />
-            <input
-              className="input-field"
-              placeholder="Piekļuves info (kods, darba laiks u.c.)"
-              value={obj.access_notes || ''}
-              onChange={(e) => updateObject(index, { access_notes: e.target.value })}
-            />
-            <textarea
-              className="input-field min-h-[64px]"
-              placeholder="Piezīmes par objektu"
-              value={obj.notes || ''}
-              onChange={(e) => updateObject(index, { notes: e.target.value })}
-            />
-          </div>
-        ))}
-      </section>
+      {isNew && (
+        <div className="card text-sm text-gray-500 text-center py-6">
+          Pēc klienta izveides šeit parādīsies objektu saraksts — katru varēs pievienot atsevišķi.
+        </div>
+      )}
 
-      <button type="submit" className="btn-primary w-full" disabled={saving}>
-        {saving ? 'Saglabā...' : isNew ? 'Izveidot klientu' : 'Saglabāt izmaiņas'}
-      </button>
-    </form>
+      <ClientObjectModal
+        open={modal.open}
+        mode={modal.open && modal.mode === 'edit' ? 'edit' : 'create'}
+        initial={modal.open && modal.mode === 'edit' ? modal.object : null}
+        onClose={() => setModal({ open: false })}
+        onSave={handleSaveObject}
+        onDelete={
+          modal.open && modal.mode === 'edit' && modal.object.id
+            ? handleDeleteObject
+            : undefined
+        }
+      />
+    </div>
   );
 }
