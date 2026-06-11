@@ -42,9 +42,19 @@ exports.clientsRouter.get('/', async (req, res, next) => {
         let where = 'WHERE c.is_active = 1';
         const params = [];
         if (search) {
-            where += ' AND (c.name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?)';
+            where += ` AND (
+        c.name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?
+        OR EXISTS (
+          SELECT 1 FROM client_objects co
+          WHERE co.client_id = c.id AND co.is_active = 1 AND co.status = 'active'
+          AND (
+            co.name LIKE ? OR co.address LIKE ? OR co.city LIKE ?
+            OR co.object_code LIKE ?
+          )
+        )
+      )`;
             const term = `%${search}%`;
-            params.push(term, term, term);
+            params.push(term, term, term, term, term, term, term);
         }
         if (city) {
             where += ' AND c.city = ?';
@@ -56,7 +66,7 @@ exports.clientsRouter.get('/', async (req, res, next) => {
 
         (SELECT COUNT(*) FROM client_objects co
 
-         WHERE co.client_id = c.id AND co.is_active = 1) AS object_count
+         WHERE co.client_id = c.id AND co.is_active = 1 AND co.status = 'active') AS object_count
 
        FROM clients c ${where}
 
@@ -76,8 +86,9 @@ exports.clientsRouter.get('/:id', async (req, res, next) => {
         const client = await (0, pool_1.queryOne)('SELECT * FROM clients WHERE id = ? AND is_active = 1', [req.params.id]);
         if (!client)
             throw new errorHandler_1.AppError(404, 'Client not found', 'NOT_FOUND');
-        const objects = await (0, clientObjects_1.listClientObjects)(req.params.id);
-        res.json({ data: { ...client, objects } });
+        const objects = await (0, clientObjects_1.listClientObjects)(req.params.id, 'active');
+        const closed_objects = await (0, clientObjects_1.listClientObjects)(req.params.id, 'closed');
+        res.json({ data: { ...client, objects, closed_objects } });
     }
     catch (err) {
         next(err);

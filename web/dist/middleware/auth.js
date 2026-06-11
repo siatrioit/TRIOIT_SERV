@@ -18,10 +18,18 @@ function authenticate(req, _res, next) {
         throw new errorHandler_1.AppError(500, 'JWT not configured');
     }
     try {
-        req.user = jsonwebtoken_1.default.verify(token, secret);
+        const payload = jsonwebtoken_1.default.verify(token, secret);
+        if (payload.type === 'portal') {
+            throw new errorHandler_1.AppError(401, 'Invalid staff token', 'AUTH_INVALID');
+        }
+        req.user = payload;
         next();
     }
-    catch {
+    catch (err) {
+        if (err instanceof errorHandler_1.AppError) {
+            next(err);
+            return;
+        }
         throw new errorHandler_1.AppError(401, 'Invalid or expired token', 'AUTH_INVALID');
     }
 }

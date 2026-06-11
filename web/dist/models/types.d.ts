@@ -45,9 +45,35 @@ export interface ClientObject {
     access_notes?: string;
     notes?: string;
     is_primary: boolean | number;
+    status: 'active' | 'closed';
+    is_active: boolean | number;
+    incident_count?: number;
+    created_at: string;
+    updated_at: string;
+}
+export type PortalScope = 'client' | 'object';
+export interface PortalUser {
+    id: string;
+    email: string;
+    full_name: string;
+    phone?: string;
     is_active: boolean | number;
     created_at: string;
     updated_at: string;
+}
+export interface PortalAccess {
+    id: string;
+    portal_user_id: string;
+    client_id: string;
+    object_id?: string | null;
+    scope: PortalScope;
+    is_active: boolean | number;
+    created_at: string;
+    email?: string;
+    full_name?: string;
+    phone?: string | null;
+    user_active?: boolean | number;
+    object_name?: string | null;
 }
 export interface Contract {
     id: string;

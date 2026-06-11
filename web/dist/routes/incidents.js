@@ -63,8 +63,17 @@ exports.incidentsRouter.get('/', async (req, res, next) => {
             params.push(assignedTo);
         }
         const countRow = await (0, pool_1.queryOne)(`SELECT COUNT(*) as total FROM incidents${join} ${where}`, params);
-        const incidents = await (0, pool_1.query)(`SELECT incidents.* FROM incidents${join} ${where}
-       ORDER BY incidents.received_at DESC LIMIT ? OFFSET ?`, [...params, limit, offset]);
+        const staffUserId = req.user.userId;
+        const incidents = await (0, pool_1.query)(`SELECT incidents.*,
+        (SELECT COUNT(*) FROM incident_messages m
+         WHERE m.incident_id = incidents.id AND m.author_type = 'portal'
+         AND m.created_at > COALESCE(
+           (SELECT r.last_read_at FROM incident_message_reads r
+            WHERE r.incident_id = incidents.id AND r.reader_type = 'staff' AND r.reader_id = ?),
+           '1970-01-01 00:00:00'
+         )) AS unread_count
+       FROM incidents${join} ${where}
+       ORDER BY incidents.received_at DESC LIMIT ? OFFSET ?`, [...params, staffUserId, limit, offset]);
         res.json({
             data: incidents,
             pagination: (0, pagination_1.buildPaginationMeta)(countRow?.total ?? 0, page, limit),
