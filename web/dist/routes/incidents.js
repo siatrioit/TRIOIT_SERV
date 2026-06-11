@@ -9,6 +9,9 @@ const pool_1 = require("../db/pool");
 const pagination_1 = require("../utils/pagination");
 const errorHandler_1 = require("../middleware/errorHandler");
 const incidentLocation_1 = require("../services/incidentLocation");
+const incidentAssignment_1 = require("../services/incidentAssignment");
+const incidentMessages_1 = require("../services/incidentMessages");
+const pushNotifications_1 = require("../services/pushNotifications");
 exports.incidentsRouter = (0, express_1.Router)();
 exports.incidentsRouter.use(auth_1.authenticate);
 const incidentSchema = zod_1.z.object({
@@ -88,9 +91,11 @@ exports.incidentsRouter.get('/', async (req, res, next) => {
 exports.incidentsRouter.get('/:id', async (req, res, next) => {
     try {
         const incident = await (0, pool_1.queryOne)(`SELECT i.*, co.name AS object_name,
+              au.full_name AS assigned_user_name,
               u.serial_number AS unit_serial, u.unit_type, u.model AS unit_model
        FROM incidents i
        LEFT JOIN client_objects co ON co.id = i.object_id
+       LEFT JOIN users au ON au.id = i.assigned_to
        LEFT JOIN units u ON u.id = i.unit_id
        WHERE i.id = ?`, [req.params.id]);
         if (!incident)
@@ -105,6 +110,7 @@ exports.incidentsRouter.post('/', (0, auth_1.authorize)('admin', 'manager', 'tec
     try {
         const body = incidentSchema.parse(req.body);
         const location = await (0, incidentLocation_1.resolveIncidentLocation)(body);
+        const assignedTo = await (0, incidentAssignment_1.resolveIncidentAssignee)(location.object_id, body.assigned_to);
         const id = (0, uuid_1.v4)();
         const incidentNumber = generateIncidentNumber();
         await (0, pool_1.query)(`INSERT INTO incidents (id, incident_number, client_id, object_id, unit_id, contract_id,
@@ -114,13 +120,62 @@ exports.incidentsRouter.post('/', (0, auth_1.authorize)('admin', 'manager', 'tec
             id, incidentNumber, location.client_id, location.object_id, location.unit_id,
             body.contract_id ?? null,
             body.reported_by ?? null, body.reported_via || 'web', body.title, body.description ?? null,
-            body.status, body.priority, body.due_at ?? null, body.assigned_to ?? null,
+            body.status, body.priority, body.due_at ?? null, assignedTo,
             body.latitude ?? null, body.longitude ?? null, body.voice_transcript ?? null,
             body.ai_confidence ?? null, body.ai_metadata ? JSON.stringify(body.ai_metadata) : null,
             req.user?.userId ?? null,
         ]);
-        const incident = await (0, pool_1.queryOne)('SELECT * FROM incidents WHERE id = ?', [id]);
+        const incident = await (0, pool_1.queryOne)(`SELECT i.*, co.name AS object_name
+       FROM incidents i
+       LEFT JOIN client_objects co ON co.id = i.object_id
+       WHERE i.id = ?`, [id]);
+        (0, pushNotifications_1.firePush)(() => (0, pushNotifications_1.notifyNewIncident)({
+            incidentId: id,
+            incidentNumber,
+            title: body.title,
+            objectName: incident?.object_name,
+            assignedTo,
+            excludeUserId: req.user?.userId ?? null,
+        }));
         res.status(201).json({ data: incident });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+exports.incidentsRouter.patch('/:id/assign', (0, auth_1.authorize)('admin', 'manager', 'technician'), async (req, res, next) => {
+    try {
+        const { assigned_to: assignedTo } = zod_1.z.object({
+            assigned_to: zod_1.z.string().uuid(),
+        }).parse(req.body);
+        const existing = await (0, pool_1.queryOne)('SELECT id, assigned_to FROM incidents WHERE id = ?', [req.params.id]);
+        if (!existing)
+            throw new errorHandler_1.AppError(404, 'Incident not found');
+        const assignee = await (0, incidentAssignment_1.assertAssignableUser)(assignedTo);
+        if (existing.assigned_to === assignee.id) {
+            const incident = await (0, pool_1.queryOne)(`SELECT i.*, co.name AS object_name, au.full_name AS assigned_user_name
+         FROM incidents i
+         LEFT JOIN client_objects co ON co.id = i.object_id
+         LEFT JOIN users au ON au.id = i.assigned_to
+         WHERE i.id = ?`, [req.params.id]);
+            return res.json({ data: incident });
+        }
+        await (0, pool_1.query)('UPDATE incidents SET assigned_to = ? WHERE id = ?', [assignee.id, req.params.id]);
+        const staffUserId = req.user.userId;
+        await (0, incidentMessages_1.addStaffMessage)(req.params.id, staffUserId, `Izsaukums pārvirzīts lietotājam ${assignee.full_name}.`);
+        const incident = await (0, pool_1.queryOne)(`SELECT i.*, co.name AS object_name, au.full_name AS assigned_user_name
+       FROM incidents i
+       LEFT JOIN client_objects co ON co.id = i.object_id
+       LEFT JOIN users au ON au.id = i.assigned_to
+       WHERE i.id = ?`, [req.params.id]);
+        (0, pushNotifications_1.firePush)(() => (0, pushNotifications_1.notifyIncidentReassigned)({
+            incidentId: req.params.id,
+            incidentNumber: incident.incident_number,
+            title: incident.title,
+            assigneeId: assignee.id,
+            excludeUserId: staffUserId,
+        }));
+        res.json({ data: incident });
     }
     catch (err) {
         next(err);

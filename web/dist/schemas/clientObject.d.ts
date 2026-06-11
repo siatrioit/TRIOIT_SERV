@@ -14,6 +14,7 @@ export declare const clientObjectSchema: z.ZodObject<{
     access_notes: z.ZodEffects<z.ZodOptional<z.ZodString>, string | undefined, unknown>;
     notes: z.ZodEffects<z.ZodOptional<z.ZodString>, string | undefined, unknown>;
     is_primary: z.ZodDefault<z.ZodOptional<z.ZodEffects<z.ZodUnion<[z.ZodBoolean, z.ZodNumber, z.ZodString]>, boolean, string | number | boolean>>>;
+    assigned_user_id: z.ZodEffects<z.ZodOptional<z.ZodNullable<z.ZodString>>, string | null | undefined, unknown>;
 }, "strip", z.ZodTypeAny, {
     name: string;
     country: string;
@@ -29,6 +30,7 @@ export declare const clientObjectSchema: z.ZodObject<{
     contact_email?: string | undefined;
     access_notes?: string | undefined;
     notes?: string | undefined;
+    assigned_user_id?: string | null | undefined;
 }, {
     name: string;
     object_code?: unknown;
@@ -44,6 +46,7 @@ export declare const clientObjectSchema: z.ZodObject<{
     access_notes?: unknown;
     notes?: unknown;
     is_primary?: string | number | boolean | undefined;
+    assigned_user_id?: unknown;
 }>;
 export declare const clientObjectInputSchema: z.ZodObject<{
     name: z.ZodString;
@@ -60,6 +63,7 @@ export declare const clientObjectInputSchema: z.ZodObject<{
     access_notes: z.ZodEffects<z.ZodOptional<z.ZodString>, string | undefined, unknown>;
     notes: z.ZodEffects<z.ZodOptional<z.ZodString>, string | undefined, unknown>;
     is_primary: z.ZodDefault<z.ZodOptional<z.ZodEffects<z.ZodUnion<[z.ZodBoolean, z.ZodNumber, z.ZodString]>, boolean, string | number | boolean>>>;
+    assigned_user_id: z.ZodEffects<z.ZodOptional<z.ZodNullable<z.ZodString>>, string | null | undefined, unknown>;
 } & {
     id: z.ZodOptional<z.ZodString>;
 }, "strip", z.ZodTypeAny, {
@@ -77,6 +81,7 @@ export declare const clientObjectInputSchema: z.ZodObject<{
     contact_email?: string | undefined;
     access_notes?: string | undefined;
     notes?: string | undefined;
+    assigned_user_id?: string | null | undefined;
     id?: string | undefined;
 }, {
     name: string;
@@ -93,6 +98,7 @@ export declare const clientObjectInputSchema: z.ZodObject<{
     access_notes?: unknown;
     notes?: unknown;
     is_primary?: string | number | boolean | undefined;
+    assigned_user_id?: unknown;
     id?: string | undefined;
 }>;
 export type ClientObjectInput = z.infer<typeof clientObjectInputSchema>;

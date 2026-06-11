@@ -12,21 +12,31 @@ exports.syncClientObjects = syncClientObjects;
 const uuid_1 = require("uuid");
 const pool_1 = require("../db/pool");
 const errorHandler_1 = require("../middleware/errorHandler");
+const incidentAssignment_1 = require("./incidentAssignment");
+const objectSelect = `co.*, u.full_name AS assigned_user_name`;
+const objectJoin = `LEFT JOIN users u ON u.id = co.assigned_user_id AND u.is_active = 1`;
+async function validateAssignedUserId(assignedUserId) {
+    if (assignedUserId) {
+        await (0, incidentAssignment_1.assertAssignableUser)(assignedUserId);
+    }
+}
 async function countObjectIncidents(objectId) {
     const row = await (0, pool_1.queryOne)('SELECT COUNT(*) AS total FROM incidents WHERE object_id = ?', [objectId]);
     return row?.total ?? 0;
 }
 async function listClientObjects(clientId, status = 'active') {
-    return (0, pool_1.query)(`SELECT co.*,
+    return (0, pool_1.query)(`SELECT ${objectSelect},
       (SELECT COUNT(*) FROM incidents i WHERE i.object_id = co.id) AS incident_count
      FROM client_objects co
+     ${objectJoin}
      WHERE co.client_id = ? AND co.is_active = 1 AND co.status = ?
      ORDER BY co.name ASC`, [clientId, status]);
 }
 async function getClientObject(clientId, objectId) {
-    return (0, pool_1.queryOne)(`SELECT co.*,
+    return (0, pool_1.queryOne)(`SELECT ${objectSelect},
       (SELECT COUNT(*) FROM incidents i WHERE i.object_id = co.id) AS incident_count
      FROM client_objects co
+     ${objectJoin}
      WHERE co.id = ? AND co.client_id = ? AND co.is_active = 1`, [objectId, clientId]);
 }
 async function insertClientObject(clientId, input, createdBy) {
@@ -35,11 +45,14 @@ async function insertClientObject(clientId, input, createdBy) {
         await (0, pool_1.query)(`UPDATE client_objects SET is_primary = 0
        WHERE client_id = ? AND status = 'active'`, [clientId]);
     }
+    if (input.assigned_user_id) {
+        await validateAssignedUserId(input.assigned_user_id);
+    }
     await (0, pool_1.query)(`INSERT INTO client_objects (
       id, client_id, name, object_code, address, city, postal_code, country,
       latitude, longitude, contact_name, contact_phone, contact_email,
-      access_notes, notes, is_primary, status, created_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`, [
+      access_notes, notes, assigned_user_id, is_primary, status, created_by
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`, [
         id,
         clientId,
         input.name,
@@ -55,10 +68,11 @@ async function insertClientObject(clientId, input, createdBy) {
         input.contact_email || null,
         input.access_notes ?? null,
         input.notes ?? null,
+        input.assigned_user_id ?? null,
         input.is_primary ? 1 : 0,
         createdBy ?? null,
     ]);
-    const row = await (0, pool_1.queryOne)('SELECT * FROM client_objects WHERE id = ?', [id]);
+    const row = await (0, pool_1.queryOne)(`SELECT ${objectSelect} FROM client_objects co ${objectJoin} WHERE co.id = ?`, [id]);
     return row;
 }
 async function updateClientObject(clientId, objectId, input) {
@@ -70,9 +84,12 @@ async function updateClientObject(clientId, objectId, input) {
         await (0, pool_1.query)(`UPDATE client_objects SET is_primary = 0
        WHERE client_id = ? AND status = 'active'`, [clientId]);
     }
+    if (input.assigned_user_id !== undefined) {
+        await validateAssignedUserId(input.assigned_user_id);
+    }
     const fields = Object.keys(input).filter((k) => k !== 'id');
     if (fields.length === 0) {
-        return (0, pool_1.queryOne)('SELECT * FROM client_objects WHERE id = ?', [objectId]);
+        return (0, pool_1.queryOne)(`SELECT ${objectSelect} FROM client_objects co ${objectJoin} WHERE co.id = ?`, [objectId]);
     }
     const setClause = fields.map((f) => `${f} = ?`).join(', ');
     const values = fields.map((f) => {
@@ -84,7 +101,7 @@ async function updateClientObject(clientId, objectId, input) {
         return v ?? null;
     });
     await (0, pool_1.query)(`UPDATE client_objects SET ${setClause} WHERE id = ? AND client_id = ?`, [...values, objectId, clientId]);
-    return (0, pool_1.queryOne)('SELECT * FROM client_objects WHERE id = ?', [objectId]);
+    return (0, pool_1.queryOne)(`SELECT ${objectSelect} FROM client_objects co ${objectJoin} WHERE co.id = ?`, [objectId]);
 }
 async function closeClientObject(clientId, objectId) {
     const existing = await getClientObject(clientId, objectId);
@@ -92,14 +109,14 @@ async function closeClientObject(clientId, objectId) {
         return null;
     await (0, pool_1.query)(`UPDATE client_objects SET status = 'closed', is_primary = 0
      WHERE id = ? AND client_id = ?`, [objectId, clientId]);
-    return (0, pool_1.queryOne)('SELECT * FROM client_objects WHERE id = ?', [objectId]);
+    return (0, pool_1.queryOne)(`SELECT ${objectSelect} FROM client_objects co ${objectJoin} WHERE co.id = ?`, [objectId]);
 }
 async function reopenClientObject(clientId, objectId) {
     const existing = await getClientObject(clientId, objectId);
     if (!existing || existing.status !== 'closed')
         return null;
     await (0, pool_1.query)(`UPDATE client_objects SET status = 'active' WHERE id = ? AND client_id = ?`, [objectId, clientId]);
-    return (0, pool_1.queryOne)('SELECT * FROM client_objects WHERE id = ?', [objectId]);
+    return (0, pool_1.queryOne)(`SELECT ${objectSelect} FROM client_objects co ${objectJoin} WHERE co.id = ?`, [objectId]);
 }
 async function deleteClientObject(clientId, objectId) {
     const existing = await getClientObject(clientId, objectId);

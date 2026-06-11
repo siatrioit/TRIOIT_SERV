@@ -28,6 +28,7 @@ const portalAccess_1 = require("./routes/portalAccess");
 const objectUnits_1 = require("./routes/objectUnits");
 const portal_1 = require("./routes/portal");
 const map_1 = require("./routes/map");
+const push_1 = require("./routes/push");
 const migrate_1 = require("./db/migrate");
 const version_1 = require("./version");
 dotenv_1.default.config();
@@ -75,6 +76,7 @@ app.get('/health', (_req, res) => {
 app.use(`${API_PREFIX}/auth`, auth_1.authRouter);
 app.use(`${API_PREFIX}/portal`, portal_1.portalRouter);
 app.use(`${API_PREFIX}/users`, users_1.usersRouter);
+app.use(`${API_PREFIX}/push`, push_1.pushRouter);
 app.use(`${API_PREFIX}/portal-access`, portalAccess_1.portalAccessRouter);
 app.use(`${API_PREFIX}/clients/:clientId/objects/:objectId/portal-access`, portalAccess_1.objectPortalAccessRouter);
 app.use(`${API_PREFIX}/clients/:clientId/portal-access`, portalAccess_1.clientPortalAccessRouter);

@@ -18,6 +18,7 @@ exports.clientObjectSchema = zod_1.z.object({
     access_notes: fields_1.optionalString,
     notes: fields_1.optionalString,
     is_primary: fields_1.boolish.optional().default(false),
+    assigned_user_id: zod_1.z.preprocess((val) => (val === '' || val === null ? null : val), zod_1.z.string().uuid().nullable().optional()),
 });
 exports.clientObjectInputSchema = exports.clientObjectSchema.extend({
     id: zod_1.z.string().uuid().optional(),

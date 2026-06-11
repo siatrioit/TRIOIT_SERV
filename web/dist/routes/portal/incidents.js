@@ -10,6 +10,8 @@ const pagination_1 = require("../../utils/pagination");
 const portalScope_1 = require("../../services/portalScope");
 const incidentMessages_1 = require("../../services/incidentMessages");
 const units_1 = require("../../services/units");
+const incidentAssignment_1 = require("../../services/incidentAssignment");
+const pushNotifications_1 = require("../../services/pushNotifications");
 exports.portalIncidentsRouter = (0, express_1.Router)();
 const createSchema = zod_1.z.object({
     client_id: zod_1.z.string().uuid(),
@@ -110,10 +112,11 @@ exports.portalIncidentsRouter.post('/', async (req, res, next) => {
         const reporter = await (0, pool_1.queryOne)('SELECT full_name FROM portal_users WHERE id = ?', [portalUserId]);
         const id = (0, uuid_1.v4)();
         const incidentNumber = generateIncidentNumber();
+        const assignedTo = await (0, incidentAssignment_1.resolveIncidentAssignee)(body.object_id);
         await (0, pool_1.query)(`INSERT INTO incidents (
         id, incident_number, client_id, object_id, unit_id, reported_by, reported_via,
-        title, description, status, priority
-      ) VALUES (?, ?, ?, ?, ?, ?, 'portal', ?, ?, 'pending', ?)`, [
+        title, description, status, priority, assigned_to
+      ) VALUES (?, ?, ?, ?, ?, ?, 'portal', ?, ?, 'pending', ?, ?)`, [
             id,
             incidentNumber,
             body.client_id,
@@ -123,6 +126,7 @@ exports.portalIncidentsRouter.post('/', async (req, res, next) => {
             body.title,
             body.description ?? null,
             body.priority,
+            assignedTo,
         ]);
         const incident = await (0, pool_1.queryOne)(`SELECT i.id, i.incident_number, i.client_id, i.object_id, i.title, i.description,
               i.status, i.priority, i.received_at, i.completed_at, i.resolution,
@@ -133,6 +137,13 @@ exports.portalIncidentsRouter.post('/', async (req, res, next) => {
        LEFT JOIN client_objects co ON co.id = i.object_id
        LEFT JOIN units u ON u.id = i.unit_id
        WHERE i.id = ?`, [id]);
+        (0, pushNotifications_1.firePush)(() => (0, pushNotifications_1.notifyNewIncident)({
+            incidentId: id,
+            incidentNumber,
+            title: body.title,
+            objectName: incident?.object_name,
+            assignedTo,
+        }));
         res.status(201).json({ data: incident });
     }
     catch (err) {
@@ -155,6 +166,16 @@ exports.portalIncidentsRouter.post('/:id/messages', async (req, res, next) => {
         const { portalUserId, access } = req.portalUser;
         const { body } = messageSchema.parse(req.body);
         const message = await (0, incidentMessages_1.addPortalMessage)(req.params.id, portalUserId, access, body);
+        const incident = await (0, pool_1.queryOne)('SELECT incident_number, assigned_to FROM incidents WHERE id = ?', [req.params.id]);
+        if (incident) {
+            (0, pushNotifications_1.firePush)(() => (0, pushNotifications_1.notifyPortalChatMessage)({
+                incidentId: req.params.id,
+                incidentNumber: incident.incident_number,
+                authorName: message.author_name,
+                messagePreview: message.body,
+                assignedTo: incident.assigned_to,
+            }));
+        }
         res.status(201).json({ data: message });
     }
     catch (err) {

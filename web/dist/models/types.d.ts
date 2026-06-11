@@ -47,6 +47,8 @@ export interface ClientObject {
     access_notes?: string;
     notes?: string;
     is_primary: boolean | number;
+    assigned_user_id?: string | null;
+    assigned_user_name?: string | null;
     status: 'active' | 'closed';
     is_active: boolean | number;
     incident_count?: number;
@@ -137,6 +139,7 @@ export interface Incident {
     completed_at?: string;
     resolution?: string;
     assigned_to?: string;
+    assigned_user_name?: string | null;
     latitude?: number;
     longitude?: number;
     voice_transcript?: string;

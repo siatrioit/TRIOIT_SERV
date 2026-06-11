@@ -6,8 +6,18 @@ const auth_1 = require("../middleware/auth");
 const errorHandler_1 = require("../middleware/errorHandler");
 const user_1 = require("../schemas/user");
 const users_1 = require("../services/users");
+const incidentAssignment_1 = require("../services/incidentAssignment");
 exports.usersRouter = (0, express_1.Router)();
 exports.usersRouter.use(auth_1.authenticate);
+exports.usersRouter.get('/assignable', (0, auth_1.authorize)('admin', 'manager', 'technician'), async (_req, res, next) => {
+    try {
+        const users = await (0, incidentAssignment_1.listAssignableStaff)();
+        res.json({ data: users });
+    }
+    catch (err) {
+        next(err);
+    }
+});
 exports.usersRouter.get('/', (0, auth_1.authorize)('admin', 'manager'), async (_req, res, next) => {
     try {
         const users = await (0, users_1.listStaffUsers)();

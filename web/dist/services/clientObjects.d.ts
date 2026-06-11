@@ -3,6 +3,7 @@ import type { ClientObjectInput } from '../schemas/clientObject';
 export type ObjectStatus = 'active' | 'closed';
 type ClientObjectRow = ClientObject & {
     incident_count?: number;
+    assigned_user_name?: string | null;
 };
 export declare function countObjectIncidents(objectId: string): Promise<number>;
 export declare function listClientObjects(clientId: string, status?: ObjectStatus): Promise<ClientObjectRow[]>;
