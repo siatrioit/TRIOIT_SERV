@@ -55,6 +55,11 @@ function ObjectRow({
           {obj.contact_phone && (
             <p className="text-xs text-gray-400 mt-0.5">{obj.contact_phone}</p>
           )}
+          {obj.assigned_user_name && (
+            <p className="text-xs text-primary-700 mt-0.5">
+              Atbildīgais: {obj.assigned_user_name}
+            </p>
+          )}
         </div>
         <span className="text-gray-400 group-hover:text-primary-600 shrink-0" aria-hidden>
           →

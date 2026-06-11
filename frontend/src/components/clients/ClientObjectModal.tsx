@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { ApiError } from '../../api/client';
 import {
   emptyObject,
@@ -8,6 +9,7 @@ import {
 import { PortalAccessSection } from './PortalAccessSection';
 import { ObjectUnitsSection } from './ObjectUnitsSection';
 import { Modal } from '../ui/Modal';
+import { ROLE_LABELS, usersApi } from '../../api/users';
 
 type ClientObjectModalProps = {
   open: boolean;
@@ -136,6 +138,14 @@ export function ClientObjectModal({
   };
 
   const busy = saving || deleting || closing || reopening;
+
+  const { data: assignableData } = useQuery({
+    queryKey: ['users-assignable'],
+    queryFn: () => usersApi.listAssignable(),
+    enabled: open && !readOnly,
+  });
+
+  const assignableUsers = assignableData?.data ?? [];
 
   const title =
     mode === 'create' ? 'Jauns objekts' : mode === 'closed' ? 'Slēgts objekts' : 'Objekts';
@@ -326,6 +336,35 @@ export function ClientObjectModal({
           readOnly={readOnly}
           disabled={readOnly}
         />
+        {!readOnly && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Atbildīgais
+            </label>
+            <select
+              className="input-field"
+              value={form.assigned_user_id ?? ''}
+              onChange={(e) =>
+                patch({ assigned_user_id: e.target.value || null })
+              }
+            >
+              <option value="">Nav norādīts (paziņojumi visiem)</option>
+              {assignableUsers.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.full_name} ({ROLE_LABELS[user.role]})
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Jauns izsaukums šim objektam automātiski tiek piešķirts šim darbiniekam.
+            </p>
+          </div>
+        )}
+        {readOnly && form.assigned_user_name && (
+          <p className="text-sm text-gray-600">
+            Atbildīgais: <span className="font-medium">{form.assigned_user_name}</span>
+          </p>
+        )}
         {!readOnly && (
           <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer py-1">
             <input

@@ -16,6 +16,8 @@ import {
   markIncidentRead,
 } from '../../services/incidentMessages';
 import { assertUnitForIncident } from '../../services/units';
+import { resolveIncidentAssignee } from '../../services/incidentAssignment';
+import { firePush, notifyNewIncident, notifyPortalChatMessage } from '../../services/pushNotifications';
 
 export const portalIncidentsRouter = Router();
 
@@ -166,12 +168,13 @@ portalIncidentsRouter.post('/', async (req, res, next) => {
 
     const id = uuidv4();
     const incidentNumber = generateIncidentNumber();
+    const assignedTo = await resolveIncidentAssignee(body.object_id);
 
     await query(
       `INSERT INTO incidents (
         id, incident_number, client_id, object_id, unit_id, reported_by, reported_via,
-        title, description, status, priority
-      ) VALUES (?, ?, ?, ?, ?, ?, 'portal', ?, ?, 'pending', ?)`,
+        title, description, status, priority, assigned_to
+      ) VALUES (?, ?, ?, ?, ?, ?, 'portal', ?, ?, 'pending', ?, ?)`,
       [
         id,
         incidentNumber,
@@ -182,6 +185,7 @@ portalIncidentsRouter.post('/', async (req, res, next) => {
         body.title,
         body.description ?? null,
         body.priority,
+        assignedTo,
       ]
     );
 
@@ -196,6 +200,16 @@ portalIncidentsRouter.post('/', async (req, res, next) => {
        LEFT JOIN units u ON u.id = i.unit_id
        WHERE i.id = ?`,
       [id]
+    );
+
+    firePush(() =>
+      notifyNewIncident({
+        incidentId: id,
+        incidentNumber,
+        title: body.title,
+        objectName: incident?.object_name,
+        assignedTo,
+      })
     );
 
     res.status(201).json({ data: incident });
@@ -220,6 +234,27 @@ portalIncidentsRouter.post('/:id/messages', async (req, res, next) => {
     const { portalUserId, access } = req.portalUser!;
     const { body } = messageSchema.parse(req.body);
     const message = await addPortalMessage(req.params.id, portalUserId, access, body);
+
+    const incident = await queryOne<{
+      incident_number: string;
+      assigned_to: string | null;
+    }>(
+      'SELECT incident_number, assigned_to FROM incidents WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (incident) {
+      firePush(() =>
+        notifyPortalChatMessage({
+          incidentId: req.params.id,
+          incidentNumber: incident.incident_number,
+          authorName: message.author_name,
+          messagePreview: message.body,
+          assignedTo: incident.assigned_to,
+        })
+      );
+    }
+
     res.status(201).json({ data: message });
   } catch (err) {
     next(err);

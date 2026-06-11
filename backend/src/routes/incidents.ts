@@ -7,6 +7,13 @@ import { parsePagination, buildPaginationMeta } from '../utils/pagination';
 import { AppError } from '../middleware/errorHandler';
 import type { Incident } from '../models/types';
 import { resolveIncidentLocation } from '../services/incidentLocation';
+import { resolveIncidentAssignee, assertAssignableUser } from '../services/incidentAssignment';
+import { addStaffMessage } from '../services/incidentMessages';
+import {
+  firePush,
+  notifyIncidentReassigned,
+  notifyNewIncident,
+} from '../services/pushNotifications';
 
 export const incidentsRouter = Router();
 incidentsRouter.use(authenticate);
@@ -100,9 +107,11 @@ incidentsRouter.get('/:id', async (req, res, next) => {
       }
     >(
       `SELECT i.*, co.name AS object_name,
+              au.full_name AS assigned_user_name,
               u.serial_number AS unit_serial, u.unit_type, u.model AS unit_model
        FROM incidents i
        LEFT JOIN client_objects co ON co.id = i.object_id
+       LEFT JOIN users au ON au.id = i.assigned_to
        LEFT JOIN units u ON u.id = i.unit_id
        WHERE i.id = ?`,
       [req.params.id]
@@ -118,6 +127,7 @@ incidentsRouter.post('/', authorize('admin', 'manager', 'technician'), async (re
   try {
     const body = incidentSchema.parse(req.body);
     const location = await resolveIncidentLocation(body);
+    const assignedTo = await resolveIncidentAssignee(location.object_id, body.assigned_to);
     const id = uuidv4();
     const incidentNumber = generateIncidentNumber();
 
@@ -130,15 +140,98 @@ incidentsRouter.post('/', authorize('admin', 'manager', 'technician'), async (re
         id, incidentNumber, location.client_id, location.object_id, location.unit_id,
         body.contract_id ?? null,
         body.reported_by ?? null, body.reported_via || 'web', body.title, body.description ?? null,
-        body.status, body.priority, body.due_at ?? null, body.assigned_to ?? null,
+        body.status, body.priority, body.due_at ?? null, assignedTo,
         body.latitude ?? null, body.longitude ?? null, body.voice_transcript ?? null,
         body.ai_confidence ?? null, body.ai_metadata ? JSON.stringify(body.ai_metadata) : null,
         req.user?.userId ?? null,
       ]
     );
 
-    const incident = await queryOne('SELECT * FROM incidents WHERE id = ?', [id]);
+    const incident = await queryOne<
+      Incident & { object_name?: string | null }
+    >(
+      `SELECT i.*, co.name AS object_name
+       FROM incidents i
+       LEFT JOIN client_objects co ON co.id = i.object_id
+       WHERE i.id = ?`,
+      [id]
+    );
+
+    firePush(() =>
+      notifyNewIncident({
+        incidentId: id,
+        incidentNumber,
+        title: body.title,
+        objectName: incident?.object_name,
+        assignedTo,
+        excludeUserId: req.user?.userId ?? null,
+      })
+    );
+
     res.status(201).json({ data: incident });
+  } catch (err) {
+    next(err);
+  }
+});
+
+incidentsRouter.patch('/:id/assign', authorize('admin', 'manager', 'technician'), async (req, res, next) => {
+  try {
+    const { assigned_to: assignedTo } = z.object({
+      assigned_to: z.string().uuid(),
+    }).parse(req.body);
+
+    const existing = await queryOne<{ id: string; assigned_to: string | null }>(
+      'SELECT id, assigned_to FROM incidents WHERE id = ?',
+      [req.params.id]
+    );
+    if (!existing) throw new AppError(404, 'Incident not found');
+
+    const assignee = await assertAssignableUser(assignedTo);
+    if (existing.assigned_to === assignee.id) {
+      const incident = await queryOne<
+        Incident & { object_name?: string | null; assigned_user_name?: string | null }
+      >(
+        `SELECT i.*, co.name AS object_name, au.full_name AS assigned_user_name
+         FROM incidents i
+         LEFT JOIN client_objects co ON co.id = i.object_id
+         LEFT JOIN users au ON au.id = i.assigned_to
+         WHERE i.id = ?`,
+        [req.params.id]
+      );
+      return res.json({ data: incident });
+    }
+
+    await query('UPDATE incidents SET assigned_to = ? WHERE id = ?', [assignee.id, req.params.id]);
+
+    const staffUserId = req.user!.userId;
+    await addStaffMessage(
+      req.params.id,
+      staffUserId,
+      `Izsaukums pārvirzīts lietotājam ${assignee.full_name}.`
+    );
+
+    const incident = await queryOne<
+      Incident & { object_name?: string | null; assigned_user_name?: string | null }
+    >(
+      `SELECT i.*, co.name AS object_name, au.full_name AS assigned_user_name
+       FROM incidents i
+       LEFT JOIN client_objects co ON co.id = i.object_id
+       LEFT JOIN users au ON au.id = i.assigned_to
+       WHERE i.id = ?`,
+      [req.params.id]
+    );
+
+    firePush(() =>
+      notifyIncidentReassigned({
+        incidentId: req.params.id,
+        incidentNumber: incident!.incident_number,
+        title: incident!.title,
+        assigneeId: assignee.id,
+        excludeUserId: staffUserId,
+      })
+    );
+
+    res.json({ data: incident });
   } catch (err) {
     next(err);
   }

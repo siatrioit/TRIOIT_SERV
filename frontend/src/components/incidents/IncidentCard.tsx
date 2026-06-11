@@ -10,6 +10,9 @@ export function IncidentCard({ incident }: { incident: Incident }) {
         <div className="flex-1 min-w-0">
           <p className="font-medium truncate">{incident.title}</p>
           <p className="text-xs text-gray-500 mt-1">{incident.incident_number}</p>
+          {incident.assigned_user_name && (
+            <p className="text-xs text-primary-700 mt-1">{incident.assigned_user_name}</p>
+          )}
         </div>
         <div className="flex flex-col gap-1 items-end shrink-0">
           {incident.unread_count != null && incident.unread_count > 0 && (

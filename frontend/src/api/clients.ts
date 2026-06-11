@@ -22,6 +22,8 @@ export interface ClientObjectInput {
   access_notes?: string;
   notes?: string;
   is_primary?: boolean;
+  assigned_user_id?: string | null;
+  assigned_user_name?: string | null;
 }
 
 export interface Client {
@@ -126,6 +128,7 @@ export function sanitizeClientObject(o: ClientObjectInput): ClientObjectInput {
     access_notes: trim(o.access_notes),
     notes: trim(o.notes),
     is_primary: Boolean(o.is_primary),
+    assigned_user_id: o.assigned_user_id || null,
   };
 }
 
@@ -143,5 +146,6 @@ export function emptyObject(isPrimary = false): ClientObjectInput {
     access_notes: '',
     notes: '',
     is_primary: isPrimary,
+    assigned_user_id: null,
   };
 }

@@ -38,8 +38,16 @@ export const ROLE_LABELS: Record<StaffRole, string> = {
   viewer: 'Skatītājs',
 };
 
+export interface AssignableStaff {
+  id: string;
+  full_name: string;
+  role: StaffRole;
+}
+
 export const usersApi = {
   list: () => api.get<{ data: StaffUser[] }>('/users'),
+
+  listAssignable: () => api.get<{ data: AssignableStaff[] }>('/users/assignable'),
 
   get: (id: string) => api.get<{ data: StaffUser }>(`/users/${id}`),
 

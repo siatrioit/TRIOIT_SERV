@@ -24,7 +24,11 @@ export default defineConfig({
       },
     },
     VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       registerType: 'autoUpdate',
+      injectRegister: 'auto',
       manifest: {
         name: 'TRIO-SERV',
         short_name: 'TRIO-SERV',
@@ -37,26 +41,12 @@ export default defineConfig({
           { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
         ],
       },
-      workbox: {
-        skipWaiting: true,
-        clientsClaim: true,
-        cleanupOutdatedCaches: true,
-        navigateFallbackDenylist: [/^\/api/, /^\/health$/],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/api\./,
-            handler: 'NetworkFirst',
-            options: { cacheName: 'api-cache' },
-          },
-          {
-            urlPattern: ({ url }) => url.pathname === '/health',
-            handler: 'NetworkOnly',
-          },
-          {
-            urlPattern: ({ url }) => url.pathname === '/app-version.json',
-            handler: 'NetworkOnly',
-          },
-        ],
+      injectManifest: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2}'],
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+      },
+      devOptions: {
+        enabled: false,
       },
     }),
   ],

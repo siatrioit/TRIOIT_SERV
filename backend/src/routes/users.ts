@@ -8,10 +8,20 @@ import {
   listStaffUsers,
   updateStaffUser,
 } from '../services/users';
+import { listAssignableStaff } from '../services/incidentAssignment';
 
 export const usersRouter = Router();
 
 usersRouter.use(authenticate);
+
+usersRouter.get('/assignable', authorize('admin', 'manager', 'technician'), async (_req, res, next) => {
+  try {
+    const users = await listAssignableStaff();
+    res.json({ data: users });
+  } catch (err) {
+    next(err);
+  }
+});
 
 usersRouter.get('/', authorize('admin', 'manager'), async (_req, res, next) => {
   try {

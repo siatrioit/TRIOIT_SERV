@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { AppBrand } from '../components/layout/AppBrand';
 import { useAuthStore } from '../store/authStore';
+import { syncPushSubscriptionIfGranted } from '../utils/pushNotifications';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -21,6 +22,9 @@ export function LoginPage() {
         data: { token: string; user: { id: string; email: string; full_name: string; role: string } };
       }>('/auth/login', { email, password });
       setAuth(res.data.token, res.data.user);
+      if (res.data.user.role !== 'viewer') {
+        syncPushSubscriptionIfGranted().catch(() => {});
+      }
       navigate('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Pieslēgšanās neizdevās');

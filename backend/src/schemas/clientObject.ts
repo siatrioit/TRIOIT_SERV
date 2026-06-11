@@ -16,6 +16,10 @@ export const clientObjectSchema = z.object({
   access_notes: optionalString,
   notes: optionalString,
   is_primary: boolish.optional().default(false),
+  assigned_user_id: z.preprocess(
+    (val) => (val === '' || val === null ? null : val),
+    z.string().uuid().nullable().optional()
+  ),
 });
 
 export const clientObjectInputSchema = clientObjectSchema.extend({

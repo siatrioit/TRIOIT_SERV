@@ -3,10 +3,21 @@ import { query, queryOne } from '../db/pool';
 import { AppError } from '../middleware/errorHandler';
 import type { ClientObject } from '../models/types';
 import type { ClientObjectInput } from '../schemas/clientObject';
+import { assertAssignableUser } from './incidentAssignment';
 
 export type ObjectStatus = 'active' | 'closed';
 
-type ClientObjectRow = ClientObject & { incident_count?: number };
+type ClientObjectRow = ClientObject & { incident_count?: number; assigned_user_name?: string | null };
+
+const objectSelect = `co.*, u.full_name AS assigned_user_name`;
+
+const objectJoin = `LEFT JOIN users u ON u.id = co.assigned_user_id AND u.is_active = 1`;
+
+async function validateAssignedUserId(assignedUserId?: string | null): Promise<void> {
+  if (assignedUserId) {
+    await assertAssignableUser(assignedUserId);
+  }
+}
 
 export async function countObjectIncidents(objectId: string): Promise<number> {
   const row = await queryOne<{ total: number }>(
@@ -21,9 +32,10 @@ export async function listClientObjects(
   status: ObjectStatus = 'active'
 ): Promise<ClientObjectRow[]> {
   return query<ClientObjectRow>(
-    `SELECT co.*,
+    `SELECT ${objectSelect},
       (SELECT COUNT(*) FROM incidents i WHERE i.object_id = co.id) AS incident_count
      FROM client_objects co
+     ${objectJoin}
      WHERE co.client_id = ? AND co.is_active = 1 AND co.status = ?
      ORDER BY co.name ASC`,
     [clientId, status]
@@ -35,9 +47,10 @@ export async function getClientObject(
   objectId: string
 ): Promise<ClientObjectRow | null> {
   return queryOne<ClientObjectRow>(
-    `SELECT co.*,
+    `SELECT ${objectSelect},
       (SELECT COUNT(*) FROM incidents i WHERE i.object_id = co.id) AS incident_count
      FROM client_objects co
+     ${objectJoin}
      WHERE co.id = ? AND co.client_id = ? AND co.is_active = 1`,
     [objectId, clientId]
   );
@@ -58,12 +71,16 @@ export async function insertClientObject(
     );
   }
 
+  if (input.assigned_user_id) {
+    await validateAssignedUserId(input.assigned_user_id);
+  }
+
   await query(
     `INSERT INTO client_objects (
       id, client_id, name, object_code, address, city, postal_code, country,
       latitude, longitude, contact_name, contact_phone, contact_email,
-      access_notes, notes, is_primary, status, created_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`,
+      access_notes, notes, assigned_user_id, is_primary, status, created_by
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`,
     [
       id,
       clientId,
@@ -80,12 +97,16 @@ export async function insertClientObject(
       input.contact_email || null,
       input.access_notes ?? null,
       input.notes ?? null,
+      input.assigned_user_id ?? null,
       input.is_primary ? 1 : 0,
       createdBy ?? null,
     ]
   );
 
-  const row = await queryOne<ClientObject>('SELECT * FROM client_objects WHERE id = ?', [id]);
+  const row = await queryOne<ClientObjectRow>(
+    `SELECT ${objectSelect} FROM client_objects co ${objectJoin} WHERE co.id = ?`,
+    [id]
+  );
   return row!;
 }
 
@@ -109,9 +130,16 @@ export async function updateClientObject(
     );
   }
 
+  if (input.assigned_user_id !== undefined) {
+    await validateAssignedUserId(input.assigned_user_id);
+  }
+
   const fields = Object.keys(input).filter((k) => k !== 'id');
   if (fields.length === 0) {
-    return queryOne<ClientObject>('SELECT * FROM client_objects WHERE id = ?', [objectId]);
+    return queryOne<ClientObjectRow>(
+      `SELECT ${objectSelect} FROM client_objects co ${objectJoin} WHERE co.id = ?`,
+      [objectId]
+    );
   }
 
   const setClause = fields.map((f) => `${f} = ?`).join(', ');
@@ -127,7 +155,10 @@ export async function updateClientObject(
     [...values, objectId, clientId]
   );
 
-  return queryOne<ClientObject>('SELECT * FROM client_objects WHERE id = ?', [objectId]);
+  return queryOne<ClientObjectRow>(
+    `SELECT ${objectSelect} FROM client_objects co ${objectJoin} WHERE co.id = ?`,
+    [objectId]
+  );
 }
 
 export async function closeClientObject(
@@ -143,7 +174,10 @@ export async function closeClientObject(
     [objectId, clientId]
   );
 
-  return queryOne<ClientObject>('SELECT * FROM client_objects WHERE id = ?', [objectId]);
+  return queryOne<ClientObjectRow>(
+    `SELECT ${objectSelect} FROM client_objects co ${objectJoin} WHERE co.id = ?`,
+    [objectId]
+  );
 }
 
 export async function reopenClientObject(
@@ -158,7 +192,10 @@ export async function reopenClientObject(
     [objectId, clientId]
   );
 
-  return queryOne<ClientObject>('SELECT * FROM client_objects WHERE id = ?', [objectId]);
+  return queryOne<ClientObjectRow>(
+    `SELECT ${objectSelect} FROM client_objects co ${objectJoin} WHERE co.id = ?`,
+    [objectId]
+  );
 }
 
 export async function deleteClientObject(

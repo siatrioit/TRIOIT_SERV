@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { incidentsApi } from '../api/incidents';
+import { IncidentAssigneeSection } from '../components/incidents/IncidentAssigneeSection';
 import { IncidentMessageThread } from '../components/incidents/IncidentMessageThread';
 import { IncidentMaterialsSection } from '../components/incidents/IncidentMaterialsSection';
 import { IncidentWorkLogSection } from '../components/incidents/IncidentWorkLogSection';
@@ -59,6 +60,15 @@ export function IncidentDetailPage() {
             </div>
           )}
         </div>
+      )}
+
+      {id && (
+        <IncidentAssigneeSection
+          incidentId={id}
+          assignedTo={incident.assigned_to}
+          assignedUserName={incident.assigned_user_name}
+          canEdit={canPost}
+        />
       )}
 
       {id && (
