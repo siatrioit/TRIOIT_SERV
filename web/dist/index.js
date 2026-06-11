@@ -1,0 +1,75 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = __importDefault(require("express"));
+const cors_1 = __importDefault(require("cors"));
+const helmet_1 = __importDefault(require("helmet"));
+const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
+const path_1 = __importDefault(require("path"));
+const dotenv_1 = __importDefault(require("dotenv"));
+const errorHandler_1 = require("./middleware/errorHandler");
+const auth_1 = require("./routes/auth");
+const clients_1 = require("./routes/clients");
+const contracts_1 = require("./routes/contracts");
+const units_1 = require("./routes/units");
+const incidents_1 = require("./routes/incidents");
+const services_1 = require("./routes/services");
+const invoices_1 = require("./routes/invoices");
+const ai_1 = require("./routes/ai");
+dotenv_1.default.config();
+const app = (0, express_1.default)();
+const PORT = process.env.PORT || 3001;
+const API_PREFIX = process.env.API_PREFIX || '/api/v1';
+// Security middleware
+app.use((0, helmet_1.default)());
+app.use((0, cors_1.default)({
+    origin: process.env.CORS_ORIGIN?.split(',') || '*',
+    credentials: true,
+}));
+app.use(express_1.default.json({ limit: '10mb' }));
+app.use(express_1.default.urlencoded({ extended: true }));
+// Rate limiting
+app.use((0, express_rate_limit_1.default)({
+    windowMs: 15 * 60 * 1000,
+    max: 200,
+    message: { error: 'Too many requests' },
+}));
+// Health check (cPanel monitoring)
+app.get('/health', (_req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+// API routes
+app.use(`${API_PREFIX}/auth`, auth_1.authRouter);
+app.use(`${API_PREFIX}/clients`, clients_1.clientsRouter);
+app.use(`${API_PREFIX}/contracts`, contracts_1.contractsRouter);
+app.use(`${API_PREFIX}/units`, units_1.unitsRouter);
+app.use(`${API_PREFIX}/incidents`, incidents_1.incidentsRouter);
+app.use(`${API_PREFIX}/services`, services_1.servicesRouter);
+app.use(`${API_PREFIX}/invoices`, invoices_1.invoicesRouter);
+app.use(`${API_PREFIX}/ai`, ai_1.aiRouter);
+// cPanel: statiskais frontend no public/ mapes (viena Node.js aplikācija uz serv.trioit.lv)
+const staticDir = process.env.STATIC_DIR;
+if (staticDir) {
+    const resolved = path_1.default.resolve(staticDir);
+    app.use(express_1.default.static(resolved));
+    // SPA maršrutēšana — visi ne-API GET pieprasījumi → index.html
+    app.get('*', (req, res, next) => {
+        if (req.path.startsWith(API_PREFIX) || req.path === '/health') {
+            return next();
+        }
+        res.sendFile(path_1.default.join(resolved, 'index.html'), (err) => {
+            if (err)
+                next(err);
+        });
+    });
+}
+app.use(errorHandler_1.errorHandler);
+app.listen(PORT, () => {
+    console.log(`TRIO-SERV running on port ${PORT}`);
+    if (staticDir)
+        console.log(`Serving static files from ${staticDir}`);
+});
+exports.default = app;
+//# sourceMappingURL=index.js.map

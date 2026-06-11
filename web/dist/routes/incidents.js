@@ -1,0 +1,126 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.incidentsRouter = void 0;
+const express_1 = require("express");
+const zod_1 = require("zod");
+const uuid_1 = require("uuid");
+const auth_1 = require("../middleware/auth");
+const pool_1 = require("../db/pool");
+const pagination_1 = require("../utils/pagination");
+const errorHandler_1 = require("../middleware/errorHandler");
+exports.incidentsRouter = (0, express_1.Router)();
+exports.incidentsRouter.use(auth_1.authenticate);
+const incidentSchema = zod_1.z.object({
+    client_id: zod_1.z.string().uuid(),
+    unit_id: zod_1.z.string().uuid().optional(),
+    contract_id: zod_1.z.string().uuid().optional(),
+    reported_by: zod_1.z.string().optional(),
+    reported_via: zod_1.z.string().optional(),
+    title: zod_1.z.string().min(1).max(255),
+    description: zod_1.z.string().optional(),
+    status: zod_1.z.enum(['pending', 'in_progress', 'paused', 'completed', 'cancelled']).default('pending'),
+    priority: zod_1.z.enum(['low', 'medium', 'high', 'critical']).default('medium'),
+    due_at: zod_1.z.string().optional(),
+    resolution: zod_1.z.string().optional(),
+    assigned_to: zod_1.z.string().uuid().optional(),
+    latitude: zod_1.z.number().optional(),
+    longitude: zod_1.z.number().optional(),
+    voice_transcript: zod_1.z.string().optional(),
+    ai_confidence: zod_1.z.number().min(0).max(1).optional(),
+    ai_metadata: zod_1.z.record(zod_1.z.string(), zod_1.z.unknown()).optional(),
+});
+function generateIncidentNumber() {
+    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+    return `INC-${date}-${rand}`;
+}
+/** GET /incidents — ar filtriem: status, priority, city, assigned_to */
+exports.incidentsRouter.get('/', async (req, res, next) => {
+    try {
+        const { page, limit, offset } = (0, pagination_1.parsePagination)(req.query);
+        const status = req.query.status;
+        const priority = req.query.priority;
+        const city = req.query.city;
+        const assignedTo = req.query.assigned_to;
+        let where = 'WHERE 1=1';
+        const params = [];
+        let join = '';
+        if (city) {
+            join = ' JOIN clients c ON incidents.client_id = c.id';
+            where += ' AND c.city = ?';
+            params.push(city);
+        }
+        if (status) {
+            where += ' AND incidents.status = ?';
+            params.push(status);
+        }
+        if (priority) {
+            where += ' AND incidents.priority = ?';
+            params.push(priority);
+        }
+        if (assignedTo) {
+            where += ' AND incidents.assigned_to = ?';
+            params.push(assignedTo);
+        }
+        const countRow = await (0, pool_1.queryOne)(`SELECT COUNT(*) as total FROM incidents${join} ${where}`, params);
+        const incidents = await (0, pool_1.query)(`SELECT incidents.* FROM incidents${join} ${where}
+       ORDER BY incidents.received_at DESC LIMIT ? OFFSET ?`, [...params, limit, offset]);
+        res.json({
+            data: incidents,
+            pagination: (0, pagination_1.buildPaginationMeta)(countRow?.total ?? 0, page, limit),
+        });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+exports.incidentsRouter.get('/:id', async (req, res, next) => {
+    try {
+        const incident = await (0, pool_1.queryOne)('SELECT * FROM incidents WHERE id = ?', [req.params.id]);
+        if (!incident)
+            throw new errorHandler_1.AppError(404, 'Incident not found');
+        res.json({ data: incident });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+exports.incidentsRouter.post('/', (0, auth_1.authorize)('admin', 'manager', 'technician'), async (req, res, next) => {
+    try {
+        const body = incidentSchema.parse(req.body);
+        const id = (0, uuid_1.v4)();
+        const incidentNumber = generateIncidentNumber();
+        await (0, pool_1.query)(`INSERT INTO incidents (id, incident_number, client_id, unit_id, contract_id,
+        reported_by, reported_via, title, description, status, priority, due_at,
+        assigned_to, latitude, longitude, voice_transcript, ai_confidence, ai_metadata, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+            id, incidentNumber, body.client_id, body.unit_id, body.contract_id,
+            body.reported_by, body.reported_via || 'web', body.title, body.description,
+            body.status, body.priority, body.due_at, body.assigned_to,
+            body.latitude, body.longitude, body.voice_transcript,
+            body.ai_confidence, body.ai_metadata ? JSON.stringify(body.ai_metadata) : null,
+            req.user?.userId,
+        ]);
+        const incident = await (0, pool_1.queryOne)('SELECT * FROM incidents WHERE id = ?', [id]);
+        res.status(201).json({ data: incident });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+exports.incidentsRouter.patch('/:id/status', (0, auth_1.authorize)('admin', 'manager', 'technician'), async (req, res, next) => {
+    try {
+        const { status, resolution } = zod_1.z.object({
+            status: zod_1.z.enum(['pending', 'in_progress', 'paused', 'completed', 'cancelled']),
+            resolution: zod_1.z.string().optional(),
+        }).parse(req.body);
+        const completedAt = status === 'completed' ? new Date().toISOString() : null;
+        await (0, pool_1.query)('UPDATE incidents SET status = ?, resolution = ?, completed_at = ? WHERE id = ?', [status, resolution, completedAt, req.params.id]);
+        const incident = await (0, pool_1.queryOne)('SELECT * FROM incidents WHERE id = ?', [req.params.id]);
+        res.json({ data: incident });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+//# sourceMappingURL=incidents.js.map
