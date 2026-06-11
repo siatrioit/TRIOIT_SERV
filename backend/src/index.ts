@@ -69,9 +69,14 @@ if (staticDir) {
 
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-  console.log(`TRIO-SERV running on port ${PORT}`);
-  if (staticDir) console.log(`Serving static files from ${staticDir}`);
-});
+// cPanel Passenger gaida module.exports, ne app.listen()
+if (process.env.PASSENGER_APP_ENV) {
+  module.exports = app;
+} else {
+  app.listen(PORT, () => {
+    console.log(`TRIO-SERV running on port ${PORT}`);
+    if (staticDir) console.log(`Serving static files from ${staticDir}`);
+  });
+}
 
 export default app;
