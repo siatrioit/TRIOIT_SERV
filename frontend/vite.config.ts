@@ -1,10 +1,28 @@
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
+const appVersion = JSON.parse(
+  readFileSync(resolve(__dirname, '../version.json'), 'utf8')
+).version as string;
+
 export default defineConfig({
   plugins: [
     react(),
+    {
+      name: 'inject-app-version',
+      transformIndexHtml() {
+        return [
+          {
+            tag: 'meta',
+            attrs: { name: 'app-version', content: appVersion },
+            injectTo: 'head',
+          },
+        ];
+      },
+    },
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
@@ -20,11 +38,23 @@ export default defineConfig({
         ],
       },
       workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
+        navigateFallbackDenylist: [/^\/api/, /^\/health$/],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/api\./,
             handler: 'NetworkFirst',
             options: { cacheName: 'api-cache' },
+          },
+          {
+            urlPattern: ({ url }) => url.pathname === '/health',
+            handler: 'NetworkOnly',
+          },
+          {
+            urlPattern: ({ url }) => url.pathname === '/app-version.json',
+            handler: 'NetworkOnly',
           },
         ],
       },
