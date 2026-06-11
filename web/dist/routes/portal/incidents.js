@@ -47,7 +47,10 @@ exports.portalIncidentsRouter.get('/', async (req, res, next) => {
             where += ' AND i.status = ?';
             queryParams.push(status);
         }
-        const countRow = await (0, pool_1.queryOne)(`SELECT COUNT(*) AS total FROM incidents i ${where}`, queryParams);
+        const countRow = await (0, pool_1.queryOne)(`SELECT COUNT(*) AS total
+       FROM incidents i
+       JOIN clients c ON c.id = i.client_id
+       ${where}`, queryParams);
         const incidents = await (0, pool_1.query)(`SELECT i.id, i.incident_number, i.client_id, i.object_id, i.title, i.description,
               i.status, i.priority, i.received_at, i.completed_at, i.resolution,
               c.name AS client_name, co.name AS object_name,

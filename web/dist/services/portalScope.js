@@ -8,6 +8,18 @@ exports.assertCanAccessObject = assertCanAccessObject;
 exports.listAccessibleObjects = listAccessibleObjects;
 const pool_1 = require("../db/pool");
 const errorHandler_1 = require("../middleware/errorHandler");
+function normalizeScope(scope) {
+    const value = String(scope).trim().toLowerCase();
+    return value === 'client' ? 'client' : 'object';
+}
+function grantObjectIds(grants) {
+    return [
+        ...new Set(grants
+            .filter((g) => normalizeScope(g.scope) === 'object' && g.object_id)
+            .map((g) => String(g.object_id).trim())
+            .filter(Boolean)),
+    ];
+}
 async function getPortalUserAccess(portalUserId) {
     return (0, pool_1.query)(`SELECT pa.id, pa.client_id, pa.object_id, pa.scope,
             c.name AS client_name, co.name AS object_name
@@ -25,28 +37,30 @@ async function buildIncidentScopeClause(grants) {
     const parts = [];
     const params = [];
     const clientScopeIds = [
-        ...new Set(grants.filter((g) => g.scope === 'client').map((g) => g.client_id)),
+        ...new Set(grants
+            .filter((g) => normalizeScope(g.scope) === 'client')
+            .map((g) => g.client_id)),
     ];
     for (const clientId of clientScopeIds) {
         parts.push('i.client_id = ?');
         params.push(clientId);
     }
-    // Bez klienta pieejas — tikai konkrētu objektu izsaukumi (arī admin panelī izveidotie)
+    const objectScopeIds = grantObjectIds(grants);
     if (clientScopeIds.length === 0) {
-        const accessibleObjects = await listAccessibleObjects(grants);
-        const objectIds = accessibleObjects.map((o) => o.id);
-        if (objectIds.length === 1) {
+        if (objectScopeIds.length === 1) {
             parts.push('i.object_id = ?');
-            params.push(objectIds[0]);
+            params.push(objectScopeIds[0]);
         }
-        else if (objectIds.length > 1) {
-            parts.push(`i.object_id IN (${objectIds.map(() => '?').join(', ')})`);
-            params.push(...objectIds);
+        else if (objectScopeIds.length > 1) {
+            parts.push(`i.object_id IN (${objectScopeIds.map(() => '?').join(', ')})`);
+            params.push(...objectScopeIds);
         }
-        const objectClientIds = [
-            ...new Set(accessibleObjects.map((o) => o.client_id)),
+        const objectOnlyClientIds = [
+            ...new Set(grants
+                .filter((g) => normalizeScope(g.scope) === 'object')
+                .map((g) => g.client_id)),
         ];
-        for (const clientId of objectClientIds) {
+        for (const clientId of objectOnlyClientIds) {
             parts.push('(i.client_id = ? AND i.object_id IS NULL)');
             params.push(clientId);
         }
@@ -66,11 +80,15 @@ async function assertCanCreateIncident(grants, clientId, objectId) {
     if (!object || object.status !== 'active') {
         throw new errorHandler_1.AppError(400, 'Objekts nav pieejams', 'INVALID_OBJECT');
     }
+    const normalizedObjectId = objectId.trim();
     const allowed = grants.some((g) => {
-        if (g.scope === 'client' && g.client_id === clientId)
+        if (normalizeScope(g.scope) === 'client' && g.client_id === clientId)
             return true;
-        if (g.scope === 'object' && g.object_id === objectId)
+        if (normalizeScope(g.scope) === 'object' &&
+            g.object_id &&
+            String(g.object_id).trim() === normalizedObjectId) {
             return true;
+        }
         return false;
     });
     if (!allowed) {
@@ -79,15 +97,20 @@ async function assertCanCreateIncident(grants, clientId, objectId) {
 }
 async function assertCanAccessObject(grants, objectId) {
     const objects = await listAccessibleObjects(grants);
-    if (!objects.some((o) => o.id === objectId)) {
+    const normalized = objectId.trim();
+    if (!objects.some((o) => o.id.trim() === normalized)) {
         throw new errorHandler_1.AppError(403, 'Nav pieejas šim objektam', 'FORBIDDEN');
     }
 }
 async function listAccessibleObjects(grants) {
     if (grants.length === 0)
         return [];
-    const clientIds = [...new Set(grants.filter((g) => g.scope === 'client').map((g) => g.client_id))];
-    const objectIds = grants.filter((g) => g.scope === 'object' && g.object_id).map((g) => g.object_id);
+    const clientIds = [
+        ...new Set(grants
+            .filter((g) => normalizeScope(g.scope) === 'client')
+            .map((g) => g.client_id)),
+    ];
+    const objectIds = grantObjectIds(grants);
     const results = [];
     if (clientIds.length > 0) {
         const placeholders = clientIds.map(() => '?').join(', ');
