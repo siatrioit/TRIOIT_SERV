@@ -59,7 +59,8 @@ git push -u origin main
 | Clone URL | `https://github.com/siatrioit/TRIOIT_SERV.git` |
 | Repository Path | `serv.trioit.lv/repo` |
 
-> Pilns ceļš: `/home/tavsuser/serv.trioit.lv/repo`
+> Pilns ceļš: `/home2/tavsuser/serv.trioit.lv/repo`  
+> (Daži hostingi lieto `/home`, citi `/home2` — pārbaudi File Manager augšējā ceļā.)
 
 3. Ja privāts repo — **SSH Key** vai **Access Token**:
    - Git Version Control → Manage → **SSH Keys** → ģenerē atslēgu
@@ -72,7 +73,7 @@ git push -u origin main
 `.cpanel.yml` failā aizvieto `TAVSUSER` ar cPanel lietotājvārdu:
 
 ```yaml
-- export DEPLOYPATH=/home/tavsuser/serv.trioit.lv/repo
+- export DEPLOYPATH=/home2/tavsuser/serv.trioit.lv/repo
 ```
 
 Commit + push, vai labo tieši serverī pēc klona.
@@ -152,5 +153,5 @@ cPanel → Git repo → **Pull Deployment** — ieslēdz, lai push uz `main` aut
 | Clone failed | Pārbaudi GitHub URL / deploy key / token |
 | Deploy failed — npm not found | Labo ceļu `scripts/deploy-cpanel.sh` nodevenv aktivizācijai |
 | 502 pēc deploy | Run NPM Install + Restart Node.js app |
-| `.cpanel.yml` DEPLOYPATH nepareizs | Jābūt `/home/user/serv.trioit.lv/repo` |
+| `.cpanel.yml` DEPLOYPATH nepareizs | Jābūt `/home2/user/serv.trioit.lv/repo` (vai `/home/...` ja tāds ir tavs ceļš) |
 | Clone — mapē jau ir faili | Izmanto apakšmapi `serv.trioit.lv/repo`, ne sakni |

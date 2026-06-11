@@ -2,7 +2,7 @@
 # cPanel Git Version Control → Deploy HEAD
 # Repo: https://github.com/siatrioit/TRIOIT_SERV
 #
-# Git clone mape:            /home/TAVSUSER/serv.trioit.lv/repo
+# Git clone mape:            /home2/TAVSUSER/serv.trioit.lv/repo
 # Node.js App root:          serv.trioit.lv/repo/backend
 # Node.js Application URL:   serv.trioit.lv
 #
@@ -10,6 +10,6 @@
 
 deployment:
   tasks:
-    - export DEPLOYPATH=/home/TAVSUSER/serv.trioit.lv/repo
+    - export DEPLOYPATH=/home2/TAVSUSER/serv.trioit.lv/repo
     - cd $DEPLOYPATH
     - /bin/bash scripts/deploy-cpanel.sh

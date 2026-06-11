@@ -9,7 +9,7 @@ serv.trioit.lv               → subdomain (Node.js apkalpo visu)
   ├── /api/v1/...            → REST API
   └── /health                → health check
 
-/home/user/serv.trioit.lv/
+/home2/user/serv.trioit.lv/    # vai /home/user/ — skatīt File Manager
   ├── public_html/           → subdomain default — NETIEK LIETOTA
   └── repo/                  → Git repo (TRIOIT_SERV)
         └── backend/         → Node.js App root
