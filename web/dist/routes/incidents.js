@@ -113,11 +113,11 @@ exports.incidentsRouter.post('/', (0, auth_1.authorize)('admin', 'manager', 'tec
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
             id, incidentNumber, location.client_id, location.object_id, location.unit_id,
             body.contract_id ?? null,
-            body.reported_by, body.reported_via || 'web', body.title, body.description,
+            body.reported_by ?? null, body.reported_via || 'web', body.title, body.description ?? null,
             body.status, body.priority, body.due_at ?? null, body.assigned_to ?? null,
             body.latitude ?? null, body.longitude ?? null, body.voice_transcript ?? null,
             body.ai_confidence ?? null, body.ai_metadata ? JSON.stringify(body.ai_metadata) : null,
-            req.user?.userId,
+            req.user?.userId ?? null,
         ]);
         const incident = await (0, pool_1.queryOne)('SELECT * FROM incidents WHERE id = ?', [id]);
         res.status(201).json({ data: incident });

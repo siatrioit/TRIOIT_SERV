@@ -11,15 +11,20 @@ exports.queryOneConn = queryOneConn;
 const promise_1 = __importDefault(require("mysql2/promise"));
 const pg_1 = require("pg");
 const dbType = (process.env.DB_TYPE || 'mysql');
+/** mysql2 noraida undefined — konvertējam uz NULL */
+function normalizeParams(params) {
+    return params.map((p) => (p === undefined ? null : p));
+}
 /** Universal query helper — atbalsta gan MySQL (cPanel), gan PostgreSQL */
 async function query(sql, params = []) {
+    const bound = normalizeParams(params);
     if (dbType === 'postgres') {
         const pool = getPgPool();
-        const result = await pool.query(sql, params);
+        const result = await pool.query(sql, bound);
         return result.rows;
     }
     const pool = getMysqlPool();
-    const [rows] = await pool.execute(sql, params);
+    const [rows] = await pool.execute(sql, bound);
     return rows;
 }
 async function queryOne(sql, params = []) {
@@ -48,7 +53,7 @@ async function withMysqlTransaction(fn) {
     }
 }
 async function queryConn(conn, sql, params = []) {
-    const [rows] = await conn.execute(sql, params);
+    const [rows] = await conn.execute(sql, normalizeParams(params));
     return rows;
 }
 async function queryOneConn(conn, sql, params = []) {

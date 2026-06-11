@@ -27,6 +27,7 @@ const users_1 = require("./routes/users");
 const portalAccess_1 = require("./routes/portalAccess");
 const objectUnits_1 = require("./routes/objectUnits");
 const portal_1 = require("./routes/portal");
+const map_1 = require("./routes/map");
 const migrate_1 = require("./db/migrate");
 const version_1 = require("./version");
 dotenv_1.default.config();
@@ -86,6 +87,7 @@ app.use(`${API_PREFIX}/incidents/:incidentId/messages`, incidentMessages_1.incid
 app.use(`${API_PREFIX}/incidents/:incidentId/work-logs`, incidentWorkLogs_1.incidentWorkLogsRouter);
 app.use(`${API_PREFIX}/incidents/:incidentId/materials`, incidentMaterials_1.incidentMaterialsRouter);
 app.use(`${API_PREFIX}/incidents`, incidents_1.incidentsRouter);
+app.use(`${API_PREFIX}/map`, map_1.mapRouter);
 app.use(`${API_PREFIX}/warehouse`, warehouse_1.warehouseRouter);
 app.use(`${API_PREFIX}/services`, services_1.servicesRouter);
 app.use(`${API_PREFIX}/invoices`, invoices_1.invoicesRouter);
