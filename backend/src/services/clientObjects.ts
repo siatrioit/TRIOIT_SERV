@@ -130,7 +130,9 @@ export async function syncClientObjects(
   }
 
   return result.sort((a, b) => {
-    if (a.is_primary !== b.is_primary) return a.is_primary ? -1 : 1;
+    const aPrimary = Boolean(a.is_primary);
+    const bPrimary = Boolean(b.is_primary);
+    if (aPrimary !== bPrimary) return aPrimary ? -1 : 1;
     return a.name.localeCompare(b.name, 'lv');
   });
 }
