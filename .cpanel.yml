@@ -2,15 +2,14 @@
 # cPanel Git Version Control → Deploy HEAD
 # Repo: https://github.com/siatrioit/TRIOIT_SERV
 #
-# Git clone mape (tukša!):  /home/TAVSUSER/TRIOIT_SERV
-# Node.js App root:          TRIOIT_SERV/backend
+# Git clone mape:            /home/TAVSUSER/serv.trioit.lv/repo
+# Node.js App root:          serv.trioit.lv/repo/backend
 # Node.js Application URL:   serv.trioit.lv
 #
-# serv.trioit.lv mape ar public_html — NETIEK LIETOTA (subdomain default faili).
-# Visu apkalpo Node.js.
+# serv.trioit.lv/public_html — NETIEK LIETOTA. Visu apkalpo Node.js.
 
 deployment:
   tasks:
-    - export DEPLOYPATH=/home/TAVSUSER/TRIOIT_SERV
+    - export DEPLOYPATH=/home/TAVSUSER/serv.trioit.lv/repo
     - cd $DEPLOYPATH
     - /bin/bash scripts/deploy-cpanel.sh

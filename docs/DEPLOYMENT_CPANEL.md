@@ -9,11 +9,13 @@ serv.trioit.lv               → subdomain (Node.js apkalpo visu)
   ├── /api/v1/...            → REST API
   └── /health                → health check
 
-/home/user/TRIOIT_SERV/      → Git repo (atsevišķa mape!)
-/home/user/serv.trioit.lv/   → subdomain default faili — NETIEK LIETOTI
+/home/user/serv.trioit.lv/
+  ├── public_html/           → subdomain default — NETIEK LIETOTA
+  └── repo/                  → Git repo (TRIOIT_SERV)
+        └── backend/         → Node.js App root
 ```
 
-**Git repo** liec mapē `TRIOIT_SERV`, ne `serv.trioit.lv` (tur jau ir `public_html`).
+**Git clone** uz `serv.trioit.lv/repo` — ne uz sakni (tur jau ir faili).
 
 ---
 
