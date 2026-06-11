@@ -6,6 +6,7 @@ import { query, queryOne } from '../db/pool';
 import { parsePagination, buildPaginationMeta } from '../utils/pagination';
 import { AppError } from '../middleware/errorHandler';
 import type { Unit } from '../models/types';
+import { deleteUnitForObject } from '../services/units';
 
 export const unitsRouter = Router();
 unitsRouter.use(authenticate);
@@ -30,19 +31,40 @@ unitsRouter.get('/', async (req, res, next) => {
     const clientId = req.query.client_id as string | undefined;
     const objectId = req.query.object_id as string | undefined;
     const serial = req.query.serial_number as string | undefined;
+    const search = req.query.search as string | undefined;
 
-    let where = 'WHERE 1=1';
+    let where = 'WHERE c.is_active = 1';
     const params: unknown[] = [];
-    if (clientId) { where += ' AND client_id = ?'; params.push(clientId); }
-    if (objectId) { where += ' AND object_id = ?'; params.push(objectId); }
-    if (serial) { where += ' AND serial_number LIKE ?'; params.push(`%${serial}%`); }
+    if (clientId) { where += ' AND u.client_id = ?'; params.push(clientId); }
+    if (objectId) { where += ' AND u.object_id = ?'; params.push(objectId); }
+    if (serial) { where += ' AND u.serial_number LIKE ?'; params.push(`%${serial}%`); }
+    if (search?.trim()) {
+      const term = `%${search.trim()}%`;
+      where += ` AND (
+        u.serial_number LIKE ? OR u.model LIKE ? OR u.manufacturer LIKE ?
+        OR c.name LIKE ? OR co.name LIKE ?
+      )`;
+      params.push(term, term, term, term, term);
+    }
 
     const countRow = await queryOne<{ total: number }>(
-      `SELECT COUNT(*) as total FROM units ${where}`, params
+      `SELECT COUNT(*) as total FROM units u
+       JOIN clients c ON c.id = u.client_id
+       LEFT JOIN client_objects co ON co.id = u.object_id
+       ${where}`,
+      params
     );
 
-    const units = await query<Unit>(
-      `SELECT * FROM units ${where} ORDER BY serial_number ASC LIMIT ? OFFSET ?`,
+    type UnitRow = Unit & { client_name: string; object_name: string | null };
+
+    const units = await query<UnitRow>(
+      `SELECT u.*, c.name AS client_name, co.name AS object_name
+       FROM units u
+       JOIN clients c ON c.id = u.client_id
+       LEFT JOIN client_objects co ON co.id = u.object_id
+       ${where}
+       ORDER BY c.name ASC, co.name ASC, u.serial_number ASC
+       LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );
 
@@ -102,6 +124,20 @@ unitsRouter.put('/:id', authorize('admin', 'manager', 'technician'), async (req,
 
     const unit = await queryOne<Unit>('SELECT * FROM units WHERE id = ?', [req.params.id]);
     res.json({ data: unit });
+  } catch (err) {
+    next(err);
+  }
+});
+
+unitsRouter.delete('/:id', authorize('admin', 'manager', 'technician'), async (req, res, next) => {
+  try {
+    const unit = await queryOne<Unit>('SELECT * FROM units WHERE id = ?', [req.params.id]);
+    if (!unit) throw new AppError(404, 'Unit not found', 'NOT_FOUND');
+    if (!unit.object_id) {
+      throw new AppError(400, 'Aktīvam jābūt piesaistītam objektam', 'INVALID_UNIT');
+    }
+    await deleteUnitForObject(unit.client_id, unit.object_id, unit.id);
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }

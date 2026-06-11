@@ -17,6 +17,8 @@ export interface Unit {
   notes?: string | null;
   created_at: string;
   updated_at: string;
+  client_name?: string;
+  object_name?: string | null;
 }
 
 export interface UnitInput {
@@ -52,6 +54,16 @@ export function unitDisplayLabel(unit: Pick<Unit, 'unit_type' | 'serial_number' 
 }
 
 export const unitsApi = {
+  list: (params?: { search?: string; client_id?: string; object_id?: string; limit?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.search) q.set('search', params.search);
+    if (params?.client_id) q.set('client_id', params.client_id);
+    if (params?.object_id) q.set('object_id', params.object_id);
+    if (params?.limit) q.set('limit', params.limit);
+    const qs = q.toString();
+    return api.get<{ data: Unit[] }>(`/units${qs ? `?${qs}` : ''}`);
+  },
+
   listForObject: (clientId: string, objectId: string) =>
     api.get<{ data: Unit[] }>(`/clients/${clientId}/objects/${objectId}/units`),
 
@@ -65,4 +77,9 @@ export const unitsApi = {
     api.delete<{ success: boolean }>(
       `/clients/${clientId}/objects/${objectId}/units/${unitId}`
     ),
+
+  update: (unitId: string, data: Partial<UnitInput>) =>
+    api.put<{ data: Unit }>(`/units/${unitId}`, data),
+
+  delete: (unitId: string) => api.delete<{ success: boolean }>(`/units/${unitId}`),
 };

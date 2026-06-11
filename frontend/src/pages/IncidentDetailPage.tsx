@@ -54,7 +54,7 @@ export function IncidentDetailPage() {
           )}
           {formatIncidentUnit(incident) && (
             <div>
-              <span className="text-gray-500">Ierīce: </span>
+              <span className="text-gray-500">Klienta aktīvs: </span>
               <span className="font-medium">{formatIncidentUnit(incident)}</span>
             </div>
           )}
@@ -68,11 +68,7 @@ export function IncidentDetailPage() {
             canEdit={canPost}
             incidentClosed={isClosed}
           />
-          <IncidentMaterialsSection
-            incidentId={id}
-            canEdit={canPost}
-            incidentClosed={isClosed}
-          />
+          <IncidentMaterialsSection incidentId={id} />
           <IncidentMessageThread
             incidentId={id}
             variant="staff"

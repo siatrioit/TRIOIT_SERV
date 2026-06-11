@@ -13,6 +13,7 @@ import { NewIncidentPage } from './pages/NewIncidentPage';
 import { InvoicesPage } from './pages/InvoicesPage';
 import { MapPage } from './pages/MapPage';
 import { WarehousePage } from './pages/WarehousePage';
+import { CustomerAssetsPage } from './pages/CustomerAssetsPage';
 import { UsersPage } from './pages/UsersPage';
 import { PortalLoginPage } from './pages/portal/PortalLoginPage';
 import { PortalIncidentsPage } from './pages/portal/PortalIncidentsPage';
@@ -66,6 +67,7 @@ export default function App() {
         <Route path="incidents/new" element={<NewIncidentPage />} />
         <Route path="incidents/:id" element={<IncidentDetailPage />} />
         <Route path="invoices" element={<InvoicesPage />} />
+        <Route path="assets" element={<CustomerAssetsPage />} />
         <Route path="warehouse" element={<WarehousePage />} />
         <Route path="map" element={<MapPage />} />
         <Route path="users" element={<UsersPage />} />
