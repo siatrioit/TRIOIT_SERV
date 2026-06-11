@@ -51,12 +51,15 @@ git push
 ```
 
 Tālāk automātiski (ar Pull Deployment) vai manuāli:
-1. **Update from Remote**
-2. **Deploy HEAD Commit**
+1. Pagaidi, kamēr [GitHub Actions](https://github.com/siatrioit/TRIOIT_SERV/actions) ir **zaļš** ✅
+2. **Update from Remote** — jāredz jauns commits `chore: update web/ build...`
+3. **Deploy HEAD Commit** — izvēlies **šo** web/ commit, ne tikai avota kodu
 
-Pagaidi ~2–3 min pēc push (GitHub Actions jāuzbūvē `web/`).
+> **Svarīgi:** cPanel Deploy kopē mapi `repo/web/`. Ja Actions **sarkans**, `web/` nav atjaunināts un lapa paliek vecā — pat ja Deploy izdevās.
 
-Pārbaudi: https://github.com/siatrioit/TRIOIT_SERV/actions — zaļš ✅
+Pagaidi ~2–3 min pēc push.
+
+Pārbaude: https://serv.trioit.lv/health — jārāda `"version": "0.1.0"` (kad backend atjaunināts)
 
 ---
 

@@ -22,7 +22,7 @@ async function assertClient(clientId: string) {
 
 clientObjectsRouter.get('/', async (req, res, next) => {
   try {
-    const clientId = req.params.clientId;
+    const clientId = req.params.clientId as string;
     await assertClient(clientId);
     const objects = await listClientObjects(clientId);
     res.json({ data: objects });
@@ -33,7 +33,7 @@ clientObjectsRouter.get('/', async (req, res, next) => {
 
 clientObjectsRouter.post('/', authorize('admin', 'manager', 'technician'), async (req, res, next) => {
   try {
-    const clientId = req.params.clientId;
+    const clientId = req.params.clientId as string;
     await assertClient(clientId);
     const body = clientObjectSchema.parse(req.body);
     const object = await insertClientObject(clientId, body, req.user?.userId);
@@ -45,7 +45,7 @@ clientObjectsRouter.post('/', authorize('admin', 'manager', 'technician'), async
 
 clientObjectsRouter.put('/:id', authorize('admin', 'manager', 'technician'), async (req, res, next) => {
   try {
-    const clientId = req.params.clientId;
+    const clientId = req.params.clientId as string;
     await assertClient(clientId);
     const body = clientObjectSchema.partial().parse(req.body);
     const object = await updateClientObject(clientId, req.params.id, body);
@@ -58,7 +58,7 @@ clientObjectsRouter.put('/:id', authorize('admin', 'manager', 'technician'), asy
 
 clientObjectsRouter.delete('/:id', authorize('admin', 'manager'), async (req, res, next) => {
   try {
-    const clientId = req.params.clientId;
+    const clientId = req.params.clientId as string;
     await assertClient(clientId);
     await query(
       'UPDATE client_objects SET is_active = 0 WHERE id = ? AND client_id = ?',

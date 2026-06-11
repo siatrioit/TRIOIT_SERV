@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import mysql from 'mysql2/promise';
+import type { RowDataPacket } from 'mysql2';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -54,7 +55,7 @@ export async function runMigrations(): Promise<string[]> {
       .sort();
 
     for (const file of files) {
-      const [existing] = await connection.query<mysql.RowDataPacket[]>(
+      const [existing] = await connection.query<RowDataPacket[]>(
         'SELECT name FROM schema_migrations WHERE name = ?',
         [file]
       );
