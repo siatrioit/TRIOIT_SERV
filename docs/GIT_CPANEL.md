@@ -146,12 +146,24 @@ cPanel → Git repo → **Pull Deployment** — ieslēdz, lai push uz `main` aut
 
 ---
 
+## Kāpēc Deploy neizdodas? (biežākie iemesli)
+
+1. **`.cpanel.yml` konflikts** — labots serverī ar roku, bet GitHub cita versija → pull/deploy apstājas
+2. **`npm` nav atrasts** — deploy skripts meklēja Node **18**, bet tev ir **20** (tagad labots)
+3. **Build bez devDependencies** — `vite`/`tsc` nav instalēti (`--omit=dev` kļūda — tagad labots)
+4. **Deploy beidzas “veiksmīgi”, bet `dist/` nav** — skatīt **Deployment Log** pilnu tekstu
+5. **Windows CRLF** — `deploy-cpanel.sh` ar `\r` → bash kļūda (tagad `.gitattributes` LF)
+
+**Kur skatīt kļūdu:** Git Version Control → repo → **View Last Deployment Output** / deploy log.
+
+---
+
 ## Biežās kļūdas
 
 | Problēma | Risinājums |
 |----------|------------|
 | Clone failed | Pārbaudi GitHub URL / deploy key / token |
-| Deploy failed — npm not found | Labo ceļu `scripts/deploy-cpanel.sh` nodevenv aktivizācijai |
+| Deploy failed — npm not found | Atjauno repo (`git pull`); deploy skripts meklē nodevenv/20 |
 | 502 pēc deploy | Run NPM Install + Restart Node.js app |
 | `.cpanel.yml` DEPLOYPATH nepareizs | Jābūt `/home2/user/serv.trioit.lv/repo` (vai `/home/...` ja tāds ir tavs ceļš) |
 | Clone — mapē jau ir faili | Izmanto apakšmapi `serv.trioit.lv/repo`, ne sakni |
