@@ -1,4 +1,13 @@
 ---
+# Pēc Pull/Deploy: kopē web/ no repo/ uz dzīvo Node.js mapi (backend/).
+# Clone: /home2/trioitlv/serv.trioit.lv/repo
+# DEPLOYPATH = vecāks (bez /repo) — kā klientiem.edgarsfoto.lv
+# Node.js App root: serv.trioit.lv/backend  |  startup: dist/index.js
+
 deployment:
   tasks:
-    - /bin/bash /home2/trioitlv/serv.trioit.lv/repo/scripts/deploy-cpanel.sh
+    - export DEPLOYPATH=/home2/trioitlv/serv.trioit.lv
+    - mkdir -p $DEPLOYPATH/backend/dist $DEPLOYPATH/backend/public
+    - /bin/cp -R repo/web/dist/* $DEPLOYPATH/backend/dist/
+    - /bin/cp -R repo/web/public/* $DEPLOYPATH/backend/public/
+    - /bin/cp repo/web/package.json repo/web/package-lock.json $DEPLOYPATH/backend/

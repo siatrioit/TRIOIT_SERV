@@ -4,10 +4,13 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - '.github/workflows/build-cpanel.yml'
+    paths-ignore:
+      - 'web/**'
+      - 'docs/**'
+      - '*.md'
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -35,16 +38,30 @@ jobs:
           cd backend
           npm ci
           npm run build
-          rm -rf public
-          mkdir -p public
-          cp -r ../frontend/dist/* public/
 
-      - name: Pack cPanel upload zip
+      - name: Prepare web/ for cPanel .cpanel.yml deploy
+        run: |
+          rm -rf web/dist web/public
+          mkdir -p web/dist web/public
+          cp -r backend/dist/* web/dist/
+          cp -r frontend/dist/* web/public/
+          cp backend/package.json backend/package-lock.json web/
+
+      - name: Commit web/ to repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add web/
+          git diff --staged --quiet && echo "No changes" && exit 0
+          git commit -m "chore: update web/ build for cPanel deploy [skip ci]"
+          git push
+
+      - name: Pack manual upload zip (backup)
         run: |
           mkdir -p cpanel-upload/dist cpanel-upload/public
-          cp -r backend/dist/* cpanel-upload/dist/
-          cp -r backend/public/* cpanel-upload/public/
-          cp backend/package.json backend/package-lock.json cpanel-upload/
+          cp -r web/dist/* cpanel-upload/dist/
+          cp -r web/public/* cpanel-upload/public/
+          cp web/package.json web/package-lock.json cpanel-upload/
           cd cpanel-upload && zip -r ../trioit-cpanel-upload.zip .
 
       - uses: actions/upload-artifact@v4

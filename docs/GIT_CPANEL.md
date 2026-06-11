@@ -85,11 +85,12 @@ Commit + push, vai labo tieši serverī pēc klona.
 | Lauks | Vērtība |
 |-------|---------|
 | Node.js version | 18.x vai 20.x |
-| Application root | `serv.trioit.lv/repo/backend` |
+| Application root | **`serv.trioit.lv/backend`** (dzīvā mape pēc Deploy) |
 | Application URL | `serv.trioit.lv` |
 | Application startup file | `dist/index.js` |
 
-> `serv.trioit.lv/public_html` mapē esošie faili netiek lietoti — Node.js apkalpo visu subdomain.
+> Deploy kopē no `repo/web/` uz `serv.trioit.lv/backend/` (kā edgarsfoto projektā).  
+> Node.js **neliec** uz `repo/backend` — liec uz `serv.trioit.lv/backend`.
 
 **Environment variables** (pievieno panelī):
 
