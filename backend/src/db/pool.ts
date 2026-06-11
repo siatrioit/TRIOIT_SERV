@@ -17,7 +17,7 @@ export async function query<T = unknown>(
   }
 
   const pool = getMysqlPool();
-  const [rows] = await pool.execute(sql, params);
+  const [rows] = await pool.execute(sql, params as (string | number | boolean | null | Date)[]);
   return rows as T[];
 }
 
