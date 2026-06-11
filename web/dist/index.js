@@ -12,16 +12,34 @@ const dotenv_1 = __importDefault(require("dotenv"));
 const errorHandler_1 = require("./middleware/errorHandler");
 const auth_1 = require("./routes/auth");
 const clients_1 = require("./routes/clients");
+const clientObjects_1 = require("./routes/clientObjects");
 const contracts_1 = require("./routes/contracts");
 const units_1 = require("./routes/units");
 const incidents_1 = require("./routes/incidents");
 const services_1 = require("./routes/services");
 const invoices_1 = require("./routes/invoices");
 const ai_1 = require("./routes/ai");
+const migrate_1 = require("./db/migrate");
+const version_1 = require("./version");
 dotenv_1.default.config();
+const migrationsReady = process.env.AUTO_MIGRATE === 'true'
+    ? (0, migrate_1.runMigrations)().catch((err) => {
+        console.error('[migrate] Startup migration failed:', err);
+        throw err;
+    })
+    : Promise.resolve();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3001;
 const API_PREFIX = process.env.API_PREFIX || '/api/v1';
+app.use(async (_req, _res, next) => {
+    try {
+        await migrationsReady;
+        next();
+    }
+    catch (err) {
+        next(err);
+    }
+});
 // Security middleware
 app.use((0, helmet_1.default)());
 app.use((0, cors_1.default)({
@@ -38,10 +56,15 @@ app.use((0, express_rate_limit_1.default)({
 }));
 // Health check (cPanel monitoring)
 app.get('/health', (_req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    res.json({
+        status: 'ok',
+        version: version_1.APP_VERSION,
+        timestamp: new Date().toISOString(),
+    });
 });
 // API routes
 app.use(`${API_PREFIX}/auth`, auth_1.authRouter);
+app.use(`${API_PREFIX}/clients/:clientId/objects`, clientObjects_1.clientObjectsRouter);
 app.use(`${API_PREFIX}/clients`, clients_1.clientsRouter);
 app.use(`${API_PREFIX}/contracts`, contracts_1.contractsRouter);
 app.use(`${API_PREFIX}/units`, units_1.unitsRouter);

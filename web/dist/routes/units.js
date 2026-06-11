@@ -12,6 +12,7 @@ exports.unitsRouter = (0, express_1.Router)();
 exports.unitsRouter.use(auth_1.authenticate);
 const unitSchema = zod_1.z.object({
     client_id: zod_1.z.string().uuid(),
+    object_id: zod_1.z.string().uuid().optional(),
     contract_id: zod_1.z.string().uuid().optional(),
     unit_type: zod_1.z.enum(['computer', 'pos', 'printer', 'network', 'other']).default('other'),
     serial_number: zod_1.z.string().min(1).max(100),
@@ -26,12 +27,17 @@ exports.unitsRouter.get('/', async (req, res, next) => {
     try {
         const { page, limit, offset } = (0, pagination_1.parsePagination)(req.query);
         const clientId = req.query.client_id;
+        const objectId = req.query.object_id;
         const serial = req.query.serial_number;
         let where = 'WHERE 1=1';
         const params = [];
         if (clientId) {
             where += ' AND client_id = ?';
             params.push(clientId);
+        }
+        if (objectId) {
+            where += ' AND object_id = ?';
+            params.push(objectId);
         }
         if (serial) {
             where += ' AND serial_number LIKE ?';
@@ -63,11 +69,11 @@ exports.unitsRouter.post('/', (0, auth_1.authorize)('admin', 'manager', 'technic
     try {
         const body = unitSchema.parse(req.body);
         const id = (0, uuid_1.v4)();
-        await (0, pool_1.query)(`INSERT INTO units (id, client_id, contract_id, unit_type, serial_number, model,
+        await (0, pool_1.query)(`INSERT INTO units (id, client_id, object_id, contract_id, unit_type, serial_number, model,
         manufacturer, status, location_note, installed_at, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
-            id, body.client_id, body.contract_id, body.unit_type, body.serial_number,
-            body.model, body.manufacturer, body.status, body.location_note,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+            id, body.client_id, body.object_id ?? null, body.contract_id, body.unit_type,
+            body.serial_number, body.model, body.manufacturer, body.status, body.location_note,
             body.installed_at, body.notes,
         ]);
         const unit = await (0, pool_1.queryOne)('SELECT * FROM units WHERE id = ?', [id]);
