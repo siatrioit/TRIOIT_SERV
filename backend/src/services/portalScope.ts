@@ -33,6 +33,7 @@ export async function getPortalUserAccess(portalUserId: string): Promise<PortalA
   );
 }
 
+/** SQL nosacījums — kuri atgadījumi redzami portāla lietotājam */
 export function buildIncidentScopeClause(
   grants: PortalAccessGrant[]
 ): { clause: string; params: unknown[] } {
@@ -43,14 +44,44 @@ export function buildIncidentScopeClause(
   const parts: string[] = [];
   const params: unknown[] = [];
 
-  for (const grant of grants) {
-    if (grant.scope === 'client') {
-      parts.push('i.client_id = ?');
-      params.push(grant.client_id);
-    } else if (grant.object_id) {
-      parts.push('i.object_id = ?');
-      params.push(grant.object_id);
-    }
+  const clientScopeIds = [
+    ...new Set(grants.filter((g) => g.scope === 'client').map((g) => g.client_id)),
+  ];
+
+  for (const clientId of clientScopeIds) {
+    parts.push('i.client_id = ?');
+    params.push(clientId);
+  }
+
+  const objectScopeIds = [
+    ...new Set(
+      grants
+        .filter((g) => g.scope === 'object' && g.object_id)
+        .map((g) => g.object_id as string)
+    ),
+  ];
+
+  if (objectScopeIds.length === 1) {
+    parts.push('i.object_id = ?');
+    params.push(objectScopeIds[0]);
+  } else if (objectScopeIds.length > 1) {
+    parts.push(`i.object_id IN (${objectScopeIds.map(() => '?').join(', ')})`);
+    params.push(...objectScopeIds);
+  }
+
+  // Objekta pieeja — arī klienta vispārīgie izsaukumi bez konkrēta objekta
+  const objectOnlyClientIds = [
+    ...new Set(
+      grants
+        .filter((g) => g.scope === 'object')
+        .map((g) => g.client_id)
+        .filter((cid) => !clientScopeIds.includes(cid))
+    ),
+  ];
+
+  for (const clientId of objectOnlyClientIds) {
+    parts.push('(i.client_id = ? AND i.object_id IS NULL)');
+    params.push(clientId);
   }
 
   return { clause: parts.length ? `(${parts.join(' OR ')})` : '1 = 0', params };
@@ -92,6 +123,16 @@ export async function assertCanCreateIncident(
 
   if (!allowed) {
     throw new AppError(403, 'Nav tiesību reģistrēt izsaukumu šim objektam', 'FORBIDDEN');
+  }
+}
+
+export async function assertCanAccessObject(
+  grants: PortalAccessGrant[],
+  objectId: string
+): Promise<void> {
+  const objects = await listAccessibleObjects(grants);
+  if (!objects.some((o) => o.id === objectId)) {
+    throw new AppError(403, 'Nav pieejas šim objektam', 'FORBIDDEN');
   }
 }
 

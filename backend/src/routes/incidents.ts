@@ -7,7 +7,22 @@ import { parsePagination, buildPaginationMeta } from '../utils/pagination';
 import { AppError } from '../middleware/errorHandler';
 import type { Incident } from '../models/types';
 import { resolveIncidentLocation } from '../services/incidentLocation';
-import { assertUnitForIncident } from '../services/units';
+
+async function assertObjectRequiredForClient(
+  clientId: string,
+  objectId: string | null
+): Promise<void> {
+  if (objectId) return;
+
+  const row = await queryOne<{ total: number }>(
+    `SELECT COUNT(*) AS total FROM client_objects
+     WHERE client_id = ? AND is_active = 1 AND status = 'active'`,
+    [clientId]
+  );
+  if ((row?.total ?? 0) > 0) {
+    throw new AppError(400, 'Izvēlieties objektu', 'OBJECT_REQUIRED');
+  }
+}
 
 export const incidentsRouter = Router();
 incidentsRouter.use(authenticate);
@@ -119,6 +134,7 @@ incidentsRouter.post('/', authorize('admin', 'manager', 'technician'), async (re
   try {
     const body = incidentSchema.parse(req.body);
     const location = await resolveIncidentLocation(body);
+    await assertObjectRequiredForClient(location.client_id, location.object_id);
     const id = uuidv4();
     const incidentNumber = generateIncidentNumber();
 

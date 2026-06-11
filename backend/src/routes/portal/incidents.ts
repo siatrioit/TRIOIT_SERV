@@ -7,6 +7,7 @@ import { parsePagination, buildPaginationMeta } from '../../utils/pagination';
 import {
   assertCanCreateIncident,
   assertCanViewIncident,
+  assertCanAccessObject,
   buildIncidentScopeClause,
 } from '../../services/portalScope';
 import {
@@ -63,10 +64,20 @@ portalIncidentsRouter.get('/', async (req, res, next) => {
     const { access, portalUserId } = req.portalUser!;
     const { page, limit, offset } = parsePagination(req.query as { page?: string; limit?: string });
     const status = req.query.status as string | undefined;
+    const objectId = req.query.object_id as string | undefined;
+
+    if (objectId) {
+      await assertCanAccessObject(access, objectId);
+    }
 
     const { clause, params } = buildIncidentScopeClause(access);
     let where = `WHERE ${clause}`;
     const queryParams = [...params];
+
+    if (objectId) {
+      where += ' AND i.object_id = ?';
+      queryParams.push(objectId);
+    }
 
     if (status) {
       where += ' AND i.status = ?';
