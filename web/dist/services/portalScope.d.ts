@@ -17,10 +17,10 @@ export type PortalObject = {
 };
 export declare function getPortalUserAccess(portalUserId: string): Promise<PortalAccessGrant[]>;
 /** SQL nosacījums — kuri atgadījumi redzami portāla lietotājam */
-export declare function buildIncidentScopeClause(grants: PortalAccessGrant[]): {
+export declare function buildIncidentScopeClause(grants: PortalAccessGrant[]): Promise<{
     clause: string;
     params: unknown[];
-};
+}>;
 export declare function assertCanViewIncident(grants: PortalAccessGrant[], incidentId: string): Promise<void>;
 export declare function assertCanCreateIncident(grants: PortalAccessGrant[], clientId: string, objectId: string): Promise<void>;
 export declare function assertCanAccessObject(grants: PortalAccessGrant[], objectId: string): Promise<void>;

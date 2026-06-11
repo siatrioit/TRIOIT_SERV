@@ -18,7 +18,7 @@ async function getPortalUserAccess(portalUserId) {
        AND EXISTS (SELECT 1 FROM portal_users pu WHERE pu.id = ? AND pu.is_active = 1)`, [portalUserId, portalUserId]);
 }
 /** SQL nosacījums — kuri atgadījumi redzami portāla lietotājam */
-function buildIncidentScopeClause(grants) {
+async function buildIncidentScopeClause(grants) {
     if (grants.length === 0) {
         return { clause: '1 = 0', params: [] };
     }
@@ -31,34 +31,30 @@ function buildIncidentScopeClause(grants) {
         parts.push('i.client_id = ?');
         params.push(clientId);
     }
-    const objectScopeIds = [
-        ...new Set(grants
-            .filter((g) => g.scope === 'object' && g.object_id)
-            .map((g) => g.object_id)),
-    ];
-    if (objectScopeIds.length === 1) {
-        parts.push('i.object_id = ?');
-        params.push(objectScopeIds[0]);
-    }
-    else if (objectScopeIds.length > 1) {
-        parts.push(`i.object_id IN (${objectScopeIds.map(() => '?').join(', ')})`);
-        params.push(...objectScopeIds);
-    }
-    // Objekta pieeja — arī klienta vispārīgie izsaukumi bez konkrēta objekta
-    const objectOnlyClientIds = [
-        ...new Set(grants
-            .filter((g) => g.scope === 'object')
-            .map((g) => g.client_id)
-            .filter((cid) => !clientScopeIds.includes(cid))),
-    ];
-    for (const clientId of objectOnlyClientIds) {
-        parts.push('(i.client_id = ? AND i.object_id IS NULL)');
-        params.push(clientId);
+    // Bez klienta pieejas — tikai konkrētu objektu izsaukumi (arī admin panelī izveidotie)
+    if (clientScopeIds.length === 0) {
+        const accessibleObjects = await listAccessibleObjects(grants);
+        const objectIds = accessibleObjects.map((o) => o.id);
+        if (objectIds.length === 1) {
+            parts.push('i.object_id = ?');
+            params.push(objectIds[0]);
+        }
+        else if (objectIds.length > 1) {
+            parts.push(`i.object_id IN (${objectIds.map(() => '?').join(', ')})`);
+            params.push(...objectIds);
+        }
+        const objectClientIds = [
+            ...new Set(accessibleObjects.map((o) => o.client_id)),
+        ];
+        for (const clientId of objectClientIds) {
+            parts.push('(i.client_id = ? AND i.object_id IS NULL)');
+            params.push(clientId);
+        }
     }
     return { clause: parts.length ? `(${parts.join(' OR ')})` : '1 = 0', params };
 }
 async function assertCanViewIncident(grants, incidentId) {
-    const { clause, params } = buildIncidentScopeClause(grants);
+    const { clause, params } = await buildIncidentScopeClause(grants);
     const row = await (0, pool_1.queryOne)(`SELECT i.id FROM incidents i WHERE i.id = ? AND ${clause}`, [incidentId, ...params]);
     if (!row) {
         throw new errorHandler_1.AppError(404, 'Izsaukums nav atrasts', 'NOT_FOUND');

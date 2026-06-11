@@ -36,7 +36,7 @@ exports.portalIncidentsRouter.get('/', async (req, res, next) => {
         if (objectId) {
             await (0, portalScope_1.assertCanAccessObject)(access, objectId);
         }
-        const { clause, params } = (0, portalScope_1.buildIncidentScopeClause)(access);
+        const { clause, params } = await (0, portalScope_1.buildIncidentScopeClause)(access);
         let where = `WHERE ${clause}`;
         const queryParams = [...params];
         if (objectId) {

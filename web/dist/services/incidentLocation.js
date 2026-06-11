@@ -6,6 +6,23 @@ const zod_1 = require("zod");
 const pool_1 = require("../db/pool");
 const errorHandler_1 = require("../middleware/errorHandler");
 const units_1 = require("./units");
+async function listActiveObjectIds(clientId) {
+    const rows = await (0, pool_1.query)(`SELECT id FROM client_objects
+     WHERE client_id = ? AND is_active = 1 AND status = 'active'
+     ORDER BY name ASC`, [clientId]);
+    return rows.map((r) => r.id);
+}
+async function resolveObjectForClient(clientId, objectId) {
+    if (objectId)
+        return objectId;
+    const activeIds = await listActiveObjectIds(clientId);
+    if (activeIds.length === 1)
+        return activeIds[0];
+    if (activeIds.length > 1) {
+        throw new errorHandler_1.AppError(400, 'Izvēlieties objektu', 'OBJECT_REQUIRED');
+    }
+    return null;
+}
 async function resolveIncidentLocation(input) {
     let objectId = input.object_id ?? null;
     const unitId = input.unit_id ?? null;
@@ -24,8 +41,9 @@ async function resolveIncidentLocation(input) {
             await (0, units_1.assertUnitForIncident)(unitId, input.client_id, objectId);
         }
     }
+    objectId = await resolveObjectForClient(input.client_id, objectId);
     if (objectId) {
-        const object = await (0, pool_1.queryOne)(`SELECT id FROM client_objects
+        const object = await (0, pool_1.queryOne)(`SELECT id FROM client_objects
        WHERE id = ? AND client_id = ? AND is_active = 1 AND status = 'active'`, [objectId, input.client_id]);
         if (!object)
             throw new errorHandler_1.AppError(400, 'Objekts nav pieejams', 'INVALID_OBJECT');

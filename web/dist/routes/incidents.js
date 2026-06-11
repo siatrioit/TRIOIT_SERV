@@ -9,15 +9,6 @@ const pool_1 = require("../db/pool");
 const pagination_1 = require("../utils/pagination");
 const errorHandler_1 = require("../middleware/errorHandler");
 const incidentLocation_1 = require("../services/incidentLocation");
-async function assertObjectRequiredForClient(clientId, objectId) {
-    if (objectId)
-        return;
-    const row = await (0, pool_1.queryOne)(`SELECT COUNT(*) AS total FROM client_objects
-     WHERE client_id = ? AND is_active = 1 AND status = 'active'`, [clientId]);
-    if ((row?.total ?? 0) > 0) {
-        throw new errorHandler_1.AppError(400, 'Izvēlieties objektu', 'OBJECT_REQUIRED');
-    }
-}
 exports.incidentsRouter = (0, express_1.Router)();
 exports.incidentsRouter.use(auth_1.authenticate);
 const incidentSchema = zod_1.z.object({
@@ -114,7 +105,6 @@ exports.incidentsRouter.post('/', (0, auth_1.authorize)('admin', 'manager', 'tec
     try {
         const body = incidentSchema.parse(req.body);
         const location = await (0, incidentLocation_1.resolveIncidentLocation)(body);
-        await assertObjectRequiredForClient(location.client_id, location.object_id);
         const id = (0, uuid_1.v4)();
         const incidentNumber = generateIncidentNumber();
         await (0, pool_1.query)(`INSERT INTO incidents (id, incident_number, client_id, object_id, unit_id, contract_id,
