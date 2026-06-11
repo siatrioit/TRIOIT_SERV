@@ -8,11 +8,25 @@ import {
 } from '../api/clients';
 import { ClientObjectList } from '../components/clients/ClientObjectList';
 import { ClientObjectModal } from '../components/clients/ClientObjectModal';
+import { PortalAccessSection } from '../components/clients/PortalAccessSection';
+
+function mapObject(o: ClientObjectInput): ClientObjectInput {
+  return {
+    ...o,
+    is_primary: Boolean(o.is_primary),
+    incident_count: Number(o.incident_count ?? 0),
+  };
+}
+
+function sortByName(objects: ClientObjectInput[]): ClientObjectInput[] {
+  return [...objects].sort((a, b) => a.name.localeCompare(b.name, 'lv'));
+}
 
 type ModalState =
   | { open: false }
   | { open: true; mode: 'create' }
-  | { open: true; mode: 'edit'; object: ClientObjectInput };
+  | { open: true; mode: 'edit'; object: ClientObjectInput }
+  | { open: true; mode: 'closed'; object: ClientObjectInput };
 
 export function ClientEditPage() {
   const { id } = useParams();
@@ -34,6 +48,7 @@ export function ClientEditPage() {
   const [postalCode, setPostalCode] = useState('');
   const [notes, setNotes] = useState('');
   const [objects, setObjects] = useState<ClientObjectInput[]>([]);
+  const [closedObjects, setClosedObjects] = useState<ClientObjectInput[]>([]);
   const [modal, setModal] = useState<ModalState>({ open: false });
 
   const clientId = isNew ? null : id!;
@@ -53,12 +68,8 @@ export function ClientEditPage() {
       setCity(c.city || '');
       setPostalCode(c.postal_code || '');
       setNotes(c.notes || '');
-      setObjects(
-        (c.objects || []).map((o) => ({
-          ...o,
-          is_primary: Boolean(o.is_primary),
-        }))
-      );
+      setObjects(sortByName((c.objects || []).map(mapObject)));
+      setClosedObjects(sortByName((c.closed_objects || []).map(mapObject)));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Neizdevās ielādēt');
     } finally {
@@ -117,12 +128,8 @@ export function ClientEditPage() {
   const reloadObjects = async () => {
     if (!clientId) return;
     const res = await clientsApi.get(clientId);
-    setObjects(
-      (res.data.objects || []).map((o) => ({
-        ...o,
-        is_primary: Boolean(o.is_primary),
-      }))
-    );
+    setObjects(sortByName((res.data.objects || []).map(mapObject)));
+    setClosedObjects(sortByName((res.data.closed_objects || []).map(mapObject)));
   };
 
   const handleSaveObject = async (data: ClientObjectInput) => {
@@ -140,6 +147,32 @@ export function ClientEditPage() {
     await clientsApi.deleteObject(clientId, modal.object.id);
     await reloadObjects();
   };
+
+  const handleCloseObject = async () => {
+    if (!clientId || !modal.open || modal.mode !== 'edit' || !modal.object.id) return;
+    await clientsApi.closeObject(clientId, modal.object.id);
+    await reloadObjects();
+  };
+
+  const handleReopenObject = async () => {
+    if (!clientId || !modal.open || modal.mode !== 'closed' || !modal.object.id) return;
+    await clientsApi.reopenObject(clientId, modal.object.id);
+    await reloadObjects();
+  };
+
+  const modalMode = !modal.open
+    ? 'create'
+    : modal.mode === 'closed'
+      ? 'closed'
+      : modal.mode === 'edit'
+        ? 'edit'
+        : 'create';
+
+  const modalInitial =
+    modal.open && (modal.mode === 'edit' || modal.mode === 'closed') ? modal.object : null;
+
+  const modalIncidentCount =
+    modal.open && modal.mode === 'edit' ? modal.object.incident_count ?? 0 : 0;
 
   if (loading) {
     return <div className="text-center py-12 text-gray-400">Ielādē...</div>;
@@ -252,13 +285,18 @@ export function ClientEditPage() {
         </div>
       </form>
 
-      {!isNew && (
-        <ClientObjectList
-          objects={objects}
-          disabled={!clientId}
-          onAdd={() => setModal({ open: true, mode: 'create' })}
-          onOpen={(object) => setModal({ open: true, mode: 'edit', object })}
-        />
+      {!isNew && clientId && (
+        <>
+          <ClientObjectList
+            objects={objects}
+            closedObjects={closedObjects}
+            disabled={!clientId}
+            onAdd={() => setModal({ open: true, mode: 'create' })}
+            onOpen={(object) => setModal({ open: true, mode: 'edit', object })}
+            onOpenClosed={(object) => setModal({ open: true, mode: 'closed', object })}
+          />
+          <PortalAccessSection clientId={clientId} />
+        </>
       )}
 
       {isNew && (
@@ -269,13 +307,25 @@ export function ClientEditPage() {
 
       <ClientObjectModal
         open={modal.open}
-        mode={modal.open && modal.mode === 'edit' ? 'edit' : 'create'}
-        initial={modal.open && modal.mode === 'edit' ? modal.object : null}
+        clientId={clientId ?? undefined}
+        mode={modalMode}
+        initial={modalInitial}
+        incidentCount={modalIncidentCount}
         onClose={() => setModal({ open: false })}
         onSave={handleSaveObject}
         onDelete={
           modal.open && modal.mode === 'edit' && modal.object.id
             ? handleDeleteObject
+            : undefined
+        }
+        onCloseObject={
+          modal.open && modal.mode === 'edit' && modal.object.id
+            ? handleCloseObject
+            : undefined
+        }
+        onReopen={
+          modal.open && modal.mode === 'closed' && modal.object.id
+            ? handleReopenObject
             : undefined
         }
       />

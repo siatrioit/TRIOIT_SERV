@@ -1,15 +1,21 @@
 import { Link } from 'react-router-dom';
-import type { Incident } from '../../api/incidents';
-import { PriorityBadge } from './PriorityBadge';
-import { StatusBadge } from './StatusBadge';
+import type { PortalIncident } from '../../api/portalIncidents';
+import { PriorityBadge } from '../incidents/PriorityBadge';
+import { StatusBadge } from '../incidents/StatusBadge';
 
-export function IncidentCard({ incident }: { incident: Incident }) {
+export function PortalIncidentCard({ incident }: { incident: PortalIncident }) {
   return (
-    <Link to={`/incidents/${incident.id}`} className="card block active:bg-gray-50">
+    <Link
+      to={`/portal/incidents/${incident.id}`}
+      className="card block active:bg-gray-50 transition-colors"
+    >
       <div className="flex justify-between items-start gap-2">
         <div className="flex-1 min-w-0">
           <p className="font-medium truncate">{incident.title}</p>
           <p className="text-xs text-gray-500 mt-1">{incident.incident_number}</p>
+          {incident.object_name && (
+            <p className="text-sm text-gray-500 mt-0.5 truncate">{incident.object_name}</p>
+          )}
         </div>
         <div className="flex flex-col gap-1 items-end shrink-0">
           {incident.unread_count != null && incident.unread_count > 0 && (

@@ -62,10 +62,20 @@ incidentsRouter.get('/', async (req, res, next) => {
       `SELECT COUNT(*) as total FROM incidents${join} ${where}`, params
     );
 
-    const incidents = await query<Incident>(
-      `SELECT incidents.* FROM incidents${join} ${where}
+    const staffUserId = req.user!.userId;
+
+    const incidents = await query<Incident & { unread_count?: number }>(
+      `SELECT incidents.*,
+        (SELECT COUNT(*) FROM incident_messages m
+         WHERE m.incident_id = incidents.id AND m.author_type = 'portal'
+         AND m.created_at > COALESCE(
+           (SELECT r.last_read_at FROM incident_message_reads r
+            WHERE r.incident_id = incidents.id AND r.reader_type = 'staff' AND r.reader_id = ?),
+           '1970-01-01 00:00:00'
+         )) AS unread_count
+       FROM incidents${join} ${where}
        ORDER BY incidents.received_at DESC LIMIT ? OFFSET ?`,
-      [...params, limit, offset]
+      [...params, staffUserId, limit, offset]
     );
 
     res.json({

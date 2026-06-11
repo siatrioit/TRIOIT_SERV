@@ -1,14 +1,45 @@
 import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne } from '../db/pool';
+import { AppError } from '../middleware/errorHandler';
 import type { ClientObject } from '../models/types';
 import type { ClientObjectInput } from '../schemas/clientObject';
 
-export async function listClientObjects(clientId: string): Promise<ClientObject[]> {
-  return query<ClientObject>(
-    `SELECT * FROM client_objects
-     WHERE client_id = ? AND is_active = 1
-     ORDER BY is_primary DESC, name ASC`,
-    [clientId]
+export type ObjectStatus = 'active' | 'closed';
+
+type ClientObjectRow = ClientObject & { incident_count?: number };
+
+export async function countObjectIncidents(objectId: string): Promise<number> {
+  const row = await queryOne<{ total: number }>(
+    'SELECT COUNT(*) AS total FROM incidents WHERE object_id = ?',
+    [objectId]
+  );
+  return row?.total ?? 0;
+}
+
+export async function listClientObjects(
+  clientId: string,
+  status: ObjectStatus = 'active'
+): Promise<ClientObjectRow[]> {
+  return query<ClientObjectRow>(
+    `SELECT co.*,
+      (SELECT COUNT(*) FROM incidents i WHERE i.object_id = co.id) AS incident_count
+     FROM client_objects co
+     WHERE co.client_id = ? AND co.is_active = 1 AND co.status = ?
+     ORDER BY co.name ASC`,
+    [clientId, status]
+  );
+}
+
+export async function getClientObject(
+  clientId: string,
+  objectId: string
+): Promise<ClientObjectRow | null> {
+  return queryOne<ClientObjectRow>(
+    `SELECT co.*,
+      (SELECT COUNT(*) FROM incidents i WHERE i.object_id = co.id) AS incident_count
+     FROM client_objects co
+     WHERE co.id = ? AND co.client_id = ? AND co.is_active = 1`,
+    [objectId, clientId]
   );
 }
 
@@ -21,7 +52,8 @@ export async function insertClientObject(
 
   if (input.is_primary) {
     await query(
-      'UPDATE client_objects SET is_primary = 0 WHERE client_id = ?',
+      `UPDATE client_objects SET is_primary = 0
+       WHERE client_id = ? AND status = 'active'`,
       [clientId]
     );
   }
@@ -30,8 +62,8 @@ export async function insertClientObject(
     `INSERT INTO client_objects (
       id, client_id, name, object_code, address, city, postal_code, country,
       latitude, longitude, contact_name, contact_phone, contact_email,
-      access_notes, notes, is_primary, created_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      access_notes, notes, is_primary, status, created_by
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`,
     [
       id,
       clientId,
@@ -53,10 +85,7 @@ export async function insertClientObject(
     ]
   );
 
-  const row = await queryOne<ClientObject>(
-    'SELECT * FROM client_objects WHERE id = ?',
-    [id]
-  );
+  const row = await queryOne<ClientObject>('SELECT * FROM client_objects WHERE id = ?', [id]);
   return row!;
 }
 
@@ -66,14 +95,16 @@ export async function updateClientObject(
   input: Partial<ClientObjectInput>
 ): Promise<ClientObject | null> {
   const existing = await queryOne<{ id: string }>(
-    'SELECT id FROM client_objects WHERE id = ? AND client_id = ? AND is_active = 1',
+    `SELECT id FROM client_objects
+     WHERE id = ? AND client_id = ? AND is_active = 1 AND status = 'active'`,
     [objectId, clientId]
   );
   if (!existing) return null;
 
   if (input.is_primary) {
     await query(
-      'UPDATE client_objects SET is_primary = 0 WHERE client_id = ?',
+      `UPDATE client_objects SET is_primary = 0
+       WHERE client_id = ? AND status = 'active'`,
       [clientId]
     );
   }
@@ -99,22 +130,71 @@ export async function updateClientObject(
   return queryOne<ClientObject>('SELECT * FROM client_objects WHERE id = ?', [objectId]);
 }
 
+export async function closeClientObject(
+  clientId: string,
+  objectId: string
+): Promise<ClientObject | null> {
+  const existing = await getClientObject(clientId, objectId);
+  if (!existing || existing.status === 'closed') return null;
+
+  await query(
+    `UPDATE client_objects SET status = 'closed', is_primary = 0
+     WHERE id = ? AND client_id = ?`,
+    [objectId, clientId]
+  );
+
+  return queryOne<ClientObject>('SELECT * FROM client_objects WHERE id = ?', [objectId]);
+}
+
+export async function reopenClientObject(
+  clientId: string,
+  objectId: string
+): Promise<ClientObject | null> {
+  const existing = await getClientObject(clientId, objectId);
+  if (!existing || existing.status !== 'closed') return null;
+
+  await query(
+    `UPDATE client_objects SET status = 'active' WHERE id = ? AND client_id = ?`,
+    [objectId, clientId]
+  );
+
+  return queryOne<ClientObject>('SELECT * FROM client_objects WHERE id = ?', [objectId]);
+}
+
+export async function deleteClientObject(
+  clientId: string,
+  objectId: string
+): Promise<void> {
+  const existing = await getClientObject(clientId, objectId);
+  if (!existing) {
+    throw new AppError(404, 'Object not found', 'NOT_FOUND');
+  }
+
+  const incidents = await countObjectIncidents(objectId);
+  if (incidents > 0) {
+    throw new AppError(
+      409,
+      'Objektu nevar dzēst — ir saistīti izsaukumi. Slēdziet objektu.',
+      'HAS_INCIDENTS'
+    );
+  }
+
+  await query('DELETE FROM client_objects WHERE id = ? AND client_id = ?', [objectId, clientId]);
+}
+
 export async function syncClientObjects(
   clientId: string,
   objects: ClientObjectInput[],
   createdBy?: string
 ): Promise<ClientObject[]> {
-  const existing = await listClientObjects(clientId);
+  const existing = await listClientObjects(clientId, 'active');
   const keepIds = new Set(
     objects.map((o) => o.id).filter((id): id is string => Boolean(id))
   );
 
   for (const row of existing) {
     if (!keepIds.has(row.id)) {
-      await query(
-        'UPDATE client_objects SET is_active = 0 WHERE id = ? AND client_id = ?',
-        [row.id, clientId]
-      );
+      await closeClientObject(clientId, row.id);
     }
   }
 
@@ -129,10 +209,5 @@ export async function syncClientObjects(
     }
   }
 
-  return result.sort((a, b) => {
-    const aPrimary = Boolean(a.is_primary);
-    const bPrimary = Boolean(b.is_primary);
-    if (aPrimary !== bPrimary) return aPrimary ? -1 : 1;
-    return a.name.localeCompare(b.name, 'lv');
-  });
+  return result.sort((a, b) => a.name.localeCompare(b.name, 'lv'));
 }

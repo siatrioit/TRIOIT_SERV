@@ -10,6 +10,7 @@ export interface Incident {
   priority: string;
   received_at: string;
   due_at?: string;
+  unread_count?: number;
 }
 
 export interface PaginatedResponse<T> {

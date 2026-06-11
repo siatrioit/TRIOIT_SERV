@@ -6,6 +6,7 @@ export function IncidentsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['incidents'],
     queryFn: () => incidentsApi.list({ limit: '50' }),
+    refetchInterval: 30_000,
   });
 
   return (

@@ -29,9 +29,17 @@ export function authenticate(req: Request, _res: Response, next: NextFunction): 
   }
 
   try {
-    req.user = jwt.verify(token, secret) as AuthPayload;
+    const payload = jwt.verify(token, secret) as AuthPayload & { type?: string };
+    if (payload.type === 'portal') {
+      throw new AppError(401, 'Invalid staff token', 'AUTH_INVALID');
+    }
+    req.user = payload;
     next();
-  } catch {
+  } catch (err) {
+    if (err instanceof AppError) {
+      next(err);
+      return;
+    }
     throw new AppError(401, 'Invalid or expired token', 'AUTH_INVALID');
   }
 }

@@ -2,8 +2,12 @@ import { api } from './client';
 
 export type ClientType = 'company' | 'private';
 
+export type ObjectStatus = 'active' | 'closed';
+
 export interface ClientObjectInput {
   id?: string;
+  status?: ObjectStatus;
+  incident_count?: number;
   name: string;
   object_code?: string;
   address?: string;
@@ -34,6 +38,7 @@ export interface Client {
   notes?: string;
   object_count?: number;
   objects?: ClientObjectInput[];
+  closed_objects?: ClientObjectInput[];
 }
 
 export interface ClientPayload {
@@ -82,7 +87,19 @@ export const clientsApi = {
     ),
 
   deleteObject: (clientId: string, objectId: string) =>
-    api.delete<{ success: boolean }>(`/clients/${clientId}/objects/${objectId}`),
+    api.delete<{ success: boolean }>(`/clients/${clientId}/objects/${objectId}`, {
+      confirm: 'DELETE',
+    }),
+
+  closeObject: (clientId: string, objectId: string) =>
+    api.post<{ data: ClientObjectInput & { id: string } }>(
+      `/clients/${clientId}/objects/${objectId}/close`
+    ),
+
+  reopenObject: (clientId: string, objectId: string) =>
+    api.post<{ data: ClientObjectInput & { id: string } }>(
+      `/clients/${clientId}/objects/${objectId}/reopen`
+    ),
 };
 
 /** Tīrs API payload — bez DB papildlaukiem un tukšām virknēm */

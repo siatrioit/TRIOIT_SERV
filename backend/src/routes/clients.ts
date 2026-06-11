@@ -99,11 +99,21 @@ clientsRouter.get('/', async (req, res, next) => {
 
     if (search) {
 
-      where += ' AND (c.name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?)';
+      where += ` AND (
+        c.name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?
+        OR EXISTS (
+          SELECT 1 FROM client_objects co
+          WHERE co.client_id = c.id AND co.is_active = 1 AND co.status = 'active'
+          AND (
+            co.name LIKE ? OR co.address LIKE ? OR co.city LIKE ?
+            OR co.object_code LIKE ?
+          )
+        )
+      )`;
 
       const term = `%${search}%`;
 
-      params.push(term, term, term);
+      params.push(term, term, term, term, term, term, term);
 
     }
 
@@ -135,7 +145,7 @@ clientsRouter.get('/', async (req, res, next) => {
 
         (SELECT COUNT(*) FROM client_objects co
 
-         WHERE co.client_id = c.id AND co.is_active = 1) AS object_count
+         WHERE co.client_id = c.id AND co.is_active = 1 AND co.status = 'active') AS object_count
 
        FROM clients c ${where}
 
@@ -183,9 +193,11 @@ clientsRouter.get('/:id', async (req, res, next) => {
 
 
 
-    const objects = await listClientObjects(req.params.id);
+    const objects = await listClientObjects(req.params.id, 'active');
 
-    res.json({ data: { ...client, objects } });
+    const closed_objects = await listClientObjects(req.params.id, 'closed');
+
+    res.json({ data: { ...client, objects, closed_objects } });
 
   } catch (err) {
 

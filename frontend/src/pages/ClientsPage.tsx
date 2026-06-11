@@ -22,7 +22,7 @@ export function ClientsPage() {
 
       <input
         className="input-field"
-        placeholder="Meklēt pēc nosaukuma, tālruņa, e-pasta..."
+        placeholder="Meklēt pēc klienta, objekta, adreses, koda..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />

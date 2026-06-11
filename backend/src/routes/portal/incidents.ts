@@ -1,0 +1,207 @@
+import { Router } from 'express';
+import { z } from 'zod';
+import { v4 as uuidv4 } from 'uuid';
+import { query, queryOne } from '../../db/pool';
+import { AppError } from '../../middleware/errorHandler';
+import { parsePagination, buildPaginationMeta } from '../../utils/pagination';
+import {
+  assertCanCreateIncident,
+  assertCanViewIncident,
+  buildIncidentScopeClause,
+} from '../../services/portalScope';
+import {
+  addPortalMessage,
+  listIncidentMessages,
+  markIncidentRead,
+} from '../../services/incidentMessages';
+
+export const portalIncidentsRouter = Router();
+
+const createSchema = z.object({
+  client_id: z.string().uuid(),
+  object_id: z.string().uuid(),
+  title: z.string().min(1).max(255),
+  description: z.string().optional(),
+  priority: z.enum(['low', 'medium', 'high']).default('medium'),
+});
+
+function generateIncidentNumber(): string {
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `INC-${date}-${rand}`;
+}
+
+type PortalIncidentRow = {
+  id: string;
+  incident_number: string;
+  client_id: string;
+  object_id: string | null;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  received_at: string;
+  completed_at: string | null;
+  resolution: string | null;
+  client_name: string;
+  object_name: string | null;
+  unread_count?: number;
+};
+
+const messageSchema = z.object({
+  body: z.string().min(1).max(5000),
+});
+
+portalIncidentsRouter.get('/', async (req, res, next) => {
+  try {
+    const { access, portalUserId } = req.portalUser!;
+    const { page, limit, offset } = parsePagination(req.query as { page?: string; limit?: string });
+    const status = req.query.status as string | undefined;
+
+    const { clause, params } = buildIncidentScopeClause(access);
+    let where = `WHERE ${clause}`;
+    const queryParams = [...params];
+
+    if (status) {
+      where += ' AND i.status = ?';
+      queryParams.push(status);
+    }
+
+    const countRow = await queryOne<{ total: number }>(
+      `SELECT COUNT(*) AS total FROM incidents i ${where}`,
+      queryParams
+    );
+
+    const incidents = await query<PortalIncidentRow>(
+      `SELECT i.id, i.incident_number, i.client_id, i.object_id, i.title, i.description,
+              i.status, i.priority, i.received_at, i.completed_at, i.resolution,
+              c.name AS client_name, co.name AS object_name,
+              (SELECT COUNT(*) FROM incident_messages m
+               WHERE m.incident_id = i.id AND m.author_type = 'staff'
+               AND m.created_at > COALESCE(
+                 (SELECT r.last_read_at FROM incident_message_reads r
+                  WHERE r.incident_id = i.id AND r.reader_type = 'portal' AND r.reader_id = ?),
+                 '1970-01-01 00:00:00'
+               )) AS unread_count
+       FROM incidents i
+       JOIN clients c ON c.id = i.client_id
+       LEFT JOIN client_objects co ON co.id = i.object_id
+       ${where}
+       ORDER BY i.received_at DESC
+       LIMIT ? OFFSET ?`,
+      [...queryParams, portalUserId, limit, offset]
+    );
+
+    res.json({
+      data: incidents,
+      pagination: buildPaginationMeta(countRow?.total ?? 0, page, limit),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+portalIncidentsRouter.get('/:id', async (req, res, next) => {
+  try {
+    const { access } = req.portalUser!;
+    await assertCanViewIncident(access, req.params.id);
+
+    const incident = await queryOne<PortalIncidentRow>(
+      `SELECT i.id, i.incident_number, i.client_id, i.object_id, i.title, i.description,
+              i.status, i.priority, i.received_at, i.completed_at, i.resolution,
+              c.name AS client_name, co.name AS object_name
+       FROM incidents i
+       JOIN clients c ON c.id = i.client_id
+       LEFT JOIN client_objects co ON co.id = i.object_id
+       WHERE i.id = ?`,
+      [req.params.id]
+    );
+
+    if (!incident) throw new AppError(404, 'Izsaukums nav atrasts', 'NOT_FOUND');
+    res.json({ data: incident });
+  } catch (err) {
+    next(err);
+  }
+});
+
+portalIncidentsRouter.post('/', async (req, res, next) => {
+  try {
+    const { portalUserId, access } = req.portalUser!;
+    const body = createSchema.parse(req.body);
+
+    await assertCanCreateIncident(access, body.client_id, body.object_id);
+
+    const reporter = await queryOne<{ full_name: string }>(
+      'SELECT full_name FROM portal_users WHERE id = ?',
+      [portalUserId]
+    );
+
+    const id = uuidv4();
+    const incidentNumber = generateIncidentNumber();
+
+    await query(
+      `INSERT INTO incidents (
+        id, incident_number, client_id, object_id, reported_by, reported_via,
+        title, description, status, priority
+      ) VALUES (?, ?, ?, ?, ?, 'portal', ?, ?, 'pending', ?)`,
+      [
+        id,
+        incidentNumber,
+        body.client_id,
+        body.object_id,
+        reporter?.full_name ?? 'Klienta portāls',
+        body.title,
+        body.description ?? null,
+        body.priority,
+      ]
+    );
+
+    const incident = await queryOne<PortalIncidentRow>(
+      `SELECT i.id, i.incident_number, i.client_id, i.object_id, i.title, i.description,
+              i.status, i.priority, i.received_at, i.completed_at, i.resolution,
+              c.name AS client_name, co.name AS object_name
+       FROM incidents i
+       JOIN clients c ON c.id = i.client_id
+       LEFT JOIN client_objects co ON co.id = i.object_id
+       WHERE i.id = ?`,
+      [id]
+    );
+
+    res.status(201).json({ data: incident });
+  } catch (err) {
+    next(err);
+  }
+});
+
+portalIncidentsRouter.get('/:id/messages', async (req, res, next) => {
+  try {
+    const { access } = req.portalUser!;
+    await assertCanViewIncident(access, req.params.id);
+    const messages = await listIncidentMessages(req.params.id);
+    res.json({ data: messages });
+  } catch (err) {
+    next(err);
+  }
+});
+
+portalIncidentsRouter.post('/:id/messages', async (req, res, next) => {
+  try {
+    const { portalUserId, access } = req.portalUser!;
+    const { body } = messageSchema.parse(req.body);
+    const message = await addPortalMessage(req.params.id, portalUserId, access, body);
+    res.status(201).json({ data: message });
+  } catch (err) {
+    next(err);
+  }
+});
+
+portalIncidentsRouter.post('/:id/read', async (req, res, next) => {
+  try {
+    const { portalUserId, access } = req.portalUser!;
+    await assertCanViewIncident(access, req.params.id);
+    await markIncidentRead(req.params.id, 'portal', portalUserId);
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});

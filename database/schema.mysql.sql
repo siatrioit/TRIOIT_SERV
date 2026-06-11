@@ -62,6 +62,7 @@ CREATE TABLE client_objects (
     access_notes    TEXT,
     notes           TEXT,
     is_primary      TINYINT(1) NOT NULL DEFAULT 0,
+    status          ENUM('active','closed') NOT NULL DEFAULT 'active',
     is_active       TINYINT(1) NOT NULL DEFAULT 1,
     created_by      CHAR(36),
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -70,7 +71,43 @@ CREATE TABLE client_objects (
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
     INDEX idx_client_objects_client (client_id),
     INDEX idx_client_objects_city (city),
-    INDEX idx_client_objects_name (name)
+    INDEX idx_client_objects_name (name),
+    INDEX idx_client_objects_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- PORTAL USERS (klientu paneļa konti)
+CREATE TABLE portal_users (
+    id              CHAR(36) PRIMARY KEY,
+    email           VARCHAR(255) NOT NULL UNIQUE,
+    password_hash   VARCHAR(255) NOT NULL,
+    full_name       VARCHAR(255) NOT NULL,
+    phone           VARCHAR(50),
+    is_active       TINYINT(1) NOT NULL DEFAULT 1,
+    created_by      CHAR(36),
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_portal_users_email (email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- PORTAL ACCESS (pieeja klienta vai objekta līmenī)
+CREATE TABLE portal_access (
+    id              CHAR(36) PRIMARY KEY,
+    portal_user_id  CHAR(36) NOT NULL,
+    client_id       CHAR(36) NOT NULL,
+    object_id       CHAR(36),
+    scope           ENUM('client','object') NOT NULL,
+    is_active       TINYINT(1) NOT NULL DEFAULT 1,
+    created_by      CHAR(36),
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (portal_user_id) REFERENCES portal_users(id) ON DELETE CASCADE,
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    FOREIGN KEY (object_id) REFERENCES client_objects(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_portal_access_client (client_id),
+    INDEX idx_portal_access_object (object_id),
+    INDEX idx_portal_access_user (portal_user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- CONTRACTS
@@ -170,6 +207,32 @@ CREATE TABLE incidents (
     INDEX idx_incidents_status (status),
     INDEX idx_incidents_priority (priority),
     INDEX idx_incidents_received (received_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- INCIDENT MESSAGES (saziņa pie izsaukuma)
+CREATE TABLE incident_messages (
+    id                  CHAR(36) PRIMARY KEY,
+    incident_id         CHAR(36) NOT NULL,
+    author_type         ENUM('staff','portal') NOT NULL,
+    author_staff_id     CHAR(36),
+    author_portal_id    CHAR(36),
+    author_name         VARCHAR(255) NOT NULL,
+    body                TEXT NOT NULL,
+    created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (incident_id) REFERENCES incidents(id) ON DELETE CASCADE,
+    FOREIGN KEY (author_staff_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (author_portal_id) REFERENCES portal_users(id) ON DELETE SET NULL,
+    INDEX idx_incident_messages_incident (incident_id),
+    INDEX idx_incident_messages_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE incident_message_reads (
+    incident_id     CHAR(36) NOT NULL,
+    reader_type     ENUM('staff','portal') NOT NULL,
+    reader_id       CHAR(36) NOT NULL,
+    last_read_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (incident_id, reader_type, reader_id),
+    FOREIGN KEY (incident_id) REFERENCES incidents(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- INVOICES

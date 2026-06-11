@@ -11,9 +11,17 @@ import { clientObjectsRouter } from './routes/clientObjects';
 import { contractsRouter } from './routes/contracts';
 import { unitsRouter } from './routes/units';
 import { incidentsRouter } from './routes/incidents';
+import { incidentMessagesRouter } from './routes/incidentMessages';
 import { servicesRouter } from './routes/services';
 import { invoicesRouter } from './routes/invoices';
 import { aiRouter } from './routes/ai';
+import { usersRouter } from './routes/users';
+import {
+  clientPortalAccessRouter,
+  objectPortalAccessRouter,
+  portalAccessRouter,
+} from './routes/portalAccess';
+import { portalRouter } from './routes/portal';
 import { runMigrations } from './db/migrate';
 import { APP_VERSION } from './version';
 
@@ -67,10 +75,16 @@ app.get('/health', (_req, res) => {
 
 // API routes
 app.use(`${API_PREFIX}/auth`, authRouter);
+app.use(`${API_PREFIX}/portal`, portalRouter);
+app.use(`${API_PREFIX}/users`, usersRouter);
+app.use(`${API_PREFIX}/portal-access`, portalAccessRouter);
+app.use(`${API_PREFIX}/clients/:clientId/objects/:objectId/portal-access`, objectPortalAccessRouter);
+app.use(`${API_PREFIX}/clients/:clientId/portal-access`, clientPortalAccessRouter);
 app.use(`${API_PREFIX}/clients/:clientId/objects`, clientObjectsRouter);
 app.use(`${API_PREFIX}/clients`, clientsRouter);
 app.use(`${API_PREFIX}/contracts`, contractsRouter);
 app.use(`${API_PREFIX}/units`, unitsRouter);
+app.use(`${API_PREFIX}/incidents/:incidentId/messages`, incidentMessagesRouter);
 app.use(`${API_PREFIX}/incidents`, incidentsRouter);
 app.use(`${API_PREFIX}/services`, servicesRouter);
 app.use(`${API_PREFIX}/invoices`, invoicesRouter);
