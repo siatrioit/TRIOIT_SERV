@@ -41,7 +41,7 @@ jobs:
           mkdir -p web/dist web/public
           cp -r backend/dist/* web/dist/
           cp -r frontend/dist/* web/public/
-          cp backend/package.json web/
+          cp backend/package.json backend/server.js web/
           cp backend/package-lock.json web/ 2>/dev/null || true
 
       - name: Commit web/ to repo
