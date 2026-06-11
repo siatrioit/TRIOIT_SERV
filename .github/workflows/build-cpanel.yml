@@ -1,0 +1,54 @@
+name: Build for cPanel upload
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - '.github/workflows/build-cpanel.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          echo "VITE_API_URL=/api/v1" > .env.production
+          npm ci
+          npm run build
+
+      - name: Build backend
+        run: |
+          cd backend
+          npm ci
+          npm run build
+          rm -rf public
+          mkdir -p public
+          cp -r ../frontend/dist/* public/
+
+      - name: Pack cPanel upload zip
+        run: |
+          mkdir -p cpanel-upload/dist cpanel-upload/public
+          cp -r backend/dist/* cpanel-upload/dist/
+          cp -r backend/public/* cpanel-upload/public/
+          cp backend/package.json backend/package-lock.json cpanel-upload/
+          cd cpanel-upload && zip -r ../trioit-cpanel-upload.zip .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trioit-cpanel-upload
+          path: trioit-cpanel-upload.zip
+          retention-days: 30
