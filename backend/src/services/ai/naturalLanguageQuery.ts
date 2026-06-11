@@ -7,14 +7,6 @@ export interface NLQueryResult {
   sql_used?: string;
 }
 
-const ALLOWED_QUERIES = [
-  'pending incidents by city',
-  'overdue invoices',
-  'active contracts expiring soon',
-  'units in repair',
-  'critical incidents',
-];
-
 /**
  * Natural language vaicājumi: "Parādi visi gaidošie atgadījumi Rīgā"
  */

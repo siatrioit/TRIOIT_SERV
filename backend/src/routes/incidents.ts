@@ -27,7 +27,7 @@ const incidentSchema = z.object({
   longitude: z.number().optional(),
   voice_transcript: z.string().optional(),
   ai_confidence: z.number().min(0).max(1).optional(),
-  ai_metadata: z.record(z.unknown()).optional(),
+  ai_metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 function generateIncidentNumber(): string {
