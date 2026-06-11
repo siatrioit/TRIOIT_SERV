@@ -1,5 +1,10 @@
 import { query } from '../db/pool';
-import { buildGeocodeQuery, geocodeAddress } from './geocode';
+import {
+  formatResolvedAddress,
+  geocodeLocation,
+  jitterCoords,
+  type GeocodeParts,
+} from './geocode';
 
 export type MapOpenIncident = {
   id: string;
@@ -16,6 +21,7 @@ export type MapMarker = {
   object_name: string;
   address: string | null;
   city: string | null;
+  resolved_address: string | null;
   latitude: number | null;
   longitude: number | null;
   geocoded: boolean;
@@ -28,10 +34,14 @@ type MapObjectRow = {
   client_id: string;
   client_name: string;
   object_name: string;
-  address: string | null;
-  city: string | null;
-  postal_code: string | null;
-  country: string | null;
+  object_address: string | null;
+  object_city: string | null;
+  object_postal_code: string | null;
+  object_country: string | null;
+  client_address: string | null;
+  client_city: string | null;
+  client_postal_code: string | null;
+  client_country: string | null;
   object_latitude: number | string | null;
   object_longitude: number | string | null;
   client_latitude: number | string | null;
@@ -46,10 +56,53 @@ function parseCoord(value: number | string | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function pick(...values: Array<string | null | undefined>): string | null {
+  for (const v of values) {
+    const t = v?.trim();
+    if (t) return t;
+  }
+  return null;
+}
+
+function resolveLocationParts(row: MapObjectRow): GeocodeParts {
+  return {
+    address: pick(row.object_address, row.client_address),
+    city: pick(row.object_city, row.client_city),
+    postal_code: pick(row.object_postal_code, row.client_postal_code),
+    country: pick(row.object_country, row.client_country, 'LV'),
+  };
+}
+
+async function persistObjectCoords(
+  objectId: string,
+  latitude: number,
+  longitude: number
+): Promise<void> {
+  await query(
+    `UPDATE client_objects SET latitude = ?, longitude = ?
+     WHERE id = ? AND (latitude IS NULL OR longitude IS NULL)`,
+    [latitude, longitude, objectId]
+  );
+}
+
+export async function saveMapMarkerCoords(
+  objectId: string,
+  latitude: number,
+  longitude: number
+): Promise<void> {
+  await query(
+    'UPDATE client_objects SET latitude = ?, longitude = ? WHERE id = ?',
+    [latitude, longitude, objectId]
+  );
+}
+
 export async function listMapMarkers(): Promise<MapMarker[]> {
   const rows = await query<MapObjectRow>(
     `SELECT co.id AS object_id, co.client_id, c.name AS client_name, co.name AS object_name,
-            co.address, co.city, co.postal_code, co.country,
+            co.address AS object_address, co.city AS object_city,
+            co.postal_code AS object_postal_code, co.country AS object_country,
+            c.address AS client_address, c.city AS client_city,
+            c.postal_code AS client_postal_code, c.country AS client_country,
             co.latitude AS object_latitude, co.longitude AS object_longitude,
             c.latitude AS client_latitude, c.longitude AS client_longitude
      FROM client_objects co
@@ -88,28 +141,29 @@ export async function listMapMarkers(): Promise<MapMarker[]> {
   const markers: MapMarker[] = [];
 
   for (const row of rows) {
+    const locationParts = resolveLocationParts(row);
+    const resolvedAddress = formatResolvedAddress(locationParts);
+
     let latitude =
       parseCoord(row.object_latitude) ?? parseCoord(row.client_latitude);
     let longitude =
       parseCoord(row.object_longitude) ?? parseCoord(row.client_longitude);
     let geocoded = false;
 
-    if (latitude == null || longitude == null) {
-      const geocodeQuery = buildGeocodeQuery({
-        name: row.object_name,
-        address: row.address,
-        city: row.city,
-        postal_code: row.postal_code,
-        country: row.country,
-      });
-      if (geocodeQuery) {
-        const coords = await geocodeAddress(geocodeQuery);
-        if (coords) {
-          latitude = coords.lat;
-          longitude = coords.lng;
-          geocoded = true;
-        }
+    if ((latitude == null || longitude == null) && resolvedAddress) {
+      const coords = await geocodeLocation(locationParts);
+      if (coords) {
+        latitude = coords.lat;
+        longitude = coords.lng;
+        geocoded = true;
+        await persistObjectCoords(row.object_id, latitude, longitude);
       }
+    }
+
+    if (latitude != null && longitude != null && geocoded && !locationParts.address?.trim()) {
+      const jittered = jitterCoords(latitude, longitude, row.object_id);
+      latitude = jittered.lat;
+      longitude = jittered.lng;
     }
 
     const open = incidentsByObject.get(row.object_id) ?? [];
@@ -119,8 +173,9 @@ export async function listMapMarkers(): Promise<MapMarker[]> {
       client_id: row.client_id,
       client_name: row.client_name,
       object_name: row.object_name,
-      address: row.address,
-      city: row.city,
+      address: pick(row.object_address, row.client_address),
+      city: pick(row.object_city, row.client_city),
+      resolved_address: resolvedAddress,
       latitude,
       longitude,
       geocoded,

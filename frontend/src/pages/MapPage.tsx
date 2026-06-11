@@ -1,14 +1,17 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import L from 'leaflet';
 import { CircleMarker, MapContainer, Popup, TileLayer, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { mapApi, type MapMarker } from '../api/map';
+import { geocodeResolvedAddress } from '../utils/geocode';
 
 /** Liepāja */
 const DEFAULT_CENTER: [number, number] = [56.5047, 21.0109];
 const DEFAULT_ZOOM = 12;
+
+type PositionedMarker = MapMarker & { latitude: number; longitude: number };
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Gaida',
@@ -32,7 +35,7 @@ function markerColor(marker: MapMarker): string {
 }
 
 function formatAddress(marker: MapMarker): string {
-  return [marker.address, marker.city].filter(Boolean).join(', ') || 'Adrese nav norādīta';
+  return marker.resolved_address || [marker.address, marker.city].filter(Boolean).join(', ') || 'Adrese nav norādīta';
 }
 
 function FitMapBounds({ positions }: { positions: [number, number][] }) {
@@ -58,11 +61,13 @@ function MapLegend({
   onMap,
   withIncidents,
   missing,
+  geocoding,
 }: {
   total: number;
   onMap: number;
   withIncidents: number;
   missing: number;
+  geocoding: boolean;
 }) {
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-gray-600">
@@ -75,7 +80,8 @@ function MapLegend({
         <span className="w-3 h-3 rounded-full bg-orange-500 inline-block" />
         {withIncidents} ar atvērtu atgadījumu
       </span>
-      {missing > 0 && (
+      {geocoding && <span className="text-gray-500">Meklē adreses kartē...</span>}
+      {missing > 0 && !geocoding && (
         <span className="text-amber-700">{missing} bez koordinātām kartē</span>
       )}
     </div>
@@ -133,6 +139,12 @@ function ObjectPopup({ marker }: { marker: MapMarker }) {
 }
 
 export function MapPage() {
+  const [clientCoords, setClientCoords] = useState<
+    Record<string, { latitude: number; longitude: number }>
+  >({});
+  const [geocoding, setGeocoding] = useState(false);
+  const geocodedIds = useRef<Set<string>>(new Set());
+
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['map', 'markers'],
     queryFn: () => mapApi.markers(),
@@ -141,14 +153,63 @@ export function MapPage() {
 
   const markers = data?.data ?? [];
 
-  const positioned = useMemo(
-    () =>
-      markers.filter(
-        (m): m is MapMarker & { latitude: number; longitude: number } =>
-          m.latitude != null && m.longitude != null
-      ),
-    [markers]
-  );
+  useEffect(() => {
+    geocodedIds.current.clear();
+    setClientCoords({});
+  }, [data]);
+
+  useEffect(() => {
+    const pending = markers.filter(
+      (m) =>
+        (m.latitude == null || m.longitude == null) &&
+        m.resolved_address &&
+        !geocodedIds.current.has(m.object_id)
+    );
+    if (pending.length === 0) {
+      setGeocoding(false);
+      return;
+    }
+
+    let cancelled = false;
+    setGeocoding(true);
+
+    (async () => {
+      for (const marker of pending) {
+        if (cancelled || !marker.resolved_address) continue;
+        geocodedIds.current.add(marker.object_id);
+
+        const coords = await geocodeResolvedAddress(marker.resolved_address, marker.city);
+        if (cancelled || !coords) continue;
+
+        setClientCoords((prev) => ({
+          ...prev,
+          [marker.object_id]: { latitude: coords.lat, longitude: coords.lng },
+        }));
+
+        mapApi.saveCoordinates(marker.object_id, coords.lat, coords.lng).catch(() => {
+          /* koordinātas joprojām redzamas kartē */
+        });
+      }
+
+      if (!cancelled) setGeocoding(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [markers]);
+
+  const positioned = useMemo((): PositionedMarker[] => {
+    return markers
+      .map((m) => {
+        const extra = clientCoords[m.object_id];
+        const latitude = m.latitude ?? extra?.latitude ?? null;
+        const longitude = m.longitude ?? extra?.longitude ?? null;
+        if (latitude == null || longitude == null) return null;
+        return { ...m, latitude, longitude };
+      })
+      .filter((m): m is PositionedMarker => m != null);
+  }, [markers, clientCoords]);
 
   const positions = useMemo(
     () => positioned.map((m) => [m.latitude, m.longitude] as [number, number]),
@@ -190,6 +251,7 @@ export function MapPage() {
             onMap={positioned.length}
             withIncidents={withIncidents}
             missing={missing}
+            geocoding={geocoding}
           />
 
           {markers.length === 0 ? (
@@ -230,23 +292,29 @@ export function MapPage() {
             </div>
           )}
 
-          {missing > 0 && (
+          {missing > 0 && !geocoding && (
             <div className="text-sm text-amber-800 bg-amber-50 rounded-xl px-4 py-3">
               <p className="font-medium">Objekti bez atrašanās vietas kartē</p>
               <ul className="mt-2 space-y-1 text-xs">
                 {markers
-                  .filter((m) => m.latitude == null || m.longitude == null)
+                  .filter((m) => {
+                    const extra = clientCoords[m.object_id];
+                    const lat = m.latitude ?? extra?.latitude;
+                    const lng = m.longitude ?? extra?.longitude;
+                    return lat == null || lng == null;
+                  })
                   .slice(0, 8)
                   .map((m) => (
                     <li key={m.object_id}>
                       {m.client_name} — {m.object_name}
-                      {m.city ? ` (${m.city})` : ''}
+                      {m.resolved_address ? `: ${m.resolved_address}` : ''}
                     </li>
                   ))}
                 {missing > 8 && <li>+ vēl {missing - 8} objekti</li>}
               </ul>
               <p className="text-xs mt-2 text-amber-700">
-                Pievienojiet adresi objekta kartē — sistēma mēģinās to atrast automātiski.
+                Adrese tiek ņemta no objekta vai klienta kartes. Pārbaudiet, vai norādīta pilsēta
+                (piem. Liepāja) un iela ar numuru.
               </p>
             </div>
           )}

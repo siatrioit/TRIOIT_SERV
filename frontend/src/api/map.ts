@@ -15,6 +15,7 @@ export type MapMarker = {
   object_name: string;
   address: string | null;
   city: string | null;
+  resolved_address: string | null;
   latitude: number | null;
   longitude: number | null;
   geocoded: boolean;
@@ -24,4 +25,10 @@ export type MapMarker = {
 
 export const mapApi = {
   markers: () => api.get<{ data: MapMarker[] }>('/map/markers'),
+
+  saveCoordinates: (objectId: string, latitude: number, longitude: number) =>
+    api.patch<{ success: boolean }>(`/map/markers/${objectId}/coordinates`, {
+      latitude,
+      longitude,
+    }),
 };
