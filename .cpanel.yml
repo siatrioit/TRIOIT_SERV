@@ -1,0 +1,11 @@
+---
+# cPanel Git Version Control → Deploy HEAD
+# Repo: https://github.com/siatrioit/TRIOIT_SERV
+# Klone uz: /home/TAVSUSER/serv.trioit.lv
+# Node.js App root: serv.trioit.lv/backend  |  startup: dist/index.js
+
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/TAVSUSER/serv.trioit.lv
+    - cd $DEPLOYPATH
+    - /bin/bash scripts/deploy-cpanel.sh
