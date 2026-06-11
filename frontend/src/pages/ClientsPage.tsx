@@ -22,7 +22,7 @@ export function ClientsPage() {
 
       <input
         className="input-field"
-        placeholder="Meklēt pēc klienta, objekta, adreses, koda..."
+        placeholder="Meklēt pēc klienta, reģ. nr., PVN, objekta..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />
@@ -51,6 +51,11 @@ export function ClientsPage() {
                     {client.client_type === 'company' ? 'Uzņēmums' : 'Privātpersona'}
                     {client.city ? ` · ${client.city}` : ''}
                   </p>
+                  {(client.registration_number || client.vat_number) && (
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {[client.registration_number, client.vat_number].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
                   {client.phone && (
                     <p className="text-sm text-gray-500">{client.phone}</p>
                   )}

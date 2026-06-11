@@ -2,8 +2,11 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { incidentsApi } from '../api/incidents';
 import { IncidentMessageThread } from '../components/incidents/IncidentMessageThread';
+import { IncidentMaterialsSection } from '../components/incidents/IncidentMaterialsSection';
+import { IncidentWorkLogSection } from '../components/incidents/IncidentWorkLogSection';
 import { PriorityBadge } from '../components/incidents/PriorityBadge';
 import { StatusBadge } from '../components/incidents/StatusBadge';
+import { formatIncidentUnit } from '../utils/incidentUnit';
 import { useAuthStore } from '../store/authStore';
 
 export function IncidentDetailPage() {
@@ -41,13 +44,42 @@ export function IncidentDetailPage() {
         </div>
       )}
 
+      {(incident.object_name || formatIncidentUnit(incident)) && (
+        <div className="card space-y-2 text-sm">
+          {incident.object_name && (
+            <div>
+              <span className="text-gray-500">Objekts: </span>
+              <span className="font-medium">{incident.object_name}</span>
+            </div>
+          )}
+          {formatIncidentUnit(incident) && (
+            <div>
+              <span className="text-gray-500">Ierīce: </span>
+              <span className="font-medium">{formatIncidentUnit(incident)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {id && (
-        <IncidentMessageThread
-          incidentId={id}
-          variant="staff"
-          canPost={canPost}
-          incidentClosed={isClosed}
-        />
+        <>
+          <IncidentWorkLogSection
+            incidentId={id}
+            canEdit={canPost}
+            incidentClosed={isClosed}
+          />
+          <IncidentMaterialsSection
+            incidentId={id}
+            canEdit={canPost}
+            incidentClosed={isClosed}
+          />
+          <IncidentMessageThread
+            incidentId={id}
+            variant="staff"
+            canPost={canPost}
+            incidentClosed={isClosed}
+          />
+        </>
       )}
     </div>
   );

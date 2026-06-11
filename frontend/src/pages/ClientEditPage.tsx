@@ -40,6 +40,8 @@ export function ClientEditPage() {
 
   const [name, setName] = useState('');
   const [clientType, setClientType] = useState<ClientType>('company');
+  const [registrationNumber, setRegistrationNumber] = useState('');
+  const [vatNumber, setVatNumber] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [representative, setRepresentative] = useState('');
@@ -61,6 +63,8 @@ export function ClientEditPage() {
       const c = res.data;
       setName(c.name);
       setClientType(c.client_type);
+      setRegistrationNumber(c.registration_number || '');
+      setVatNumber(c.vat_number || '');
       setPhone(c.phone || '');
       setEmail(c.email || '');
       setRepresentative(c.representative || '');
@@ -84,6 +88,8 @@ export function ClientEditPage() {
   const clientPayload = () => ({
     name: name.trim(),
     client_type: clientType,
+    registration_number: registrationNumber.trim() || undefined,
+    vat_number: vatNumber.trim() || undefined,
     phone: phone.trim() || undefined,
     email: email.trim() || undefined,
     representative: representative.trim() || undefined,
@@ -233,6 +239,19 @@ export function ClientEditPage() {
             Privātpersona
           </button>
         </div>
+
+        <input
+          className="input-field"
+          placeholder="Reģistrācijas Nr."
+          value={registrationNumber}
+          onChange={(e) => setRegistrationNumber(e.target.value)}
+        />
+        <input
+          className="input-field"
+          placeholder="PVN Nr."
+          value={vatNumber}
+          onChange={(e) => setVatNumber(e.target.value)}
+        />
 
         <input
           className="input-field"

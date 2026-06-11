@@ -6,6 +6,7 @@ import {
   type ClientObjectInput,
 } from '../../api/clients';
 import { PortalAccessSection } from './PortalAccessSection';
+import { ObjectUnitsSection } from './ObjectUnitsSection';
 import { Modal } from '../ui/Modal';
 
 type ClientObjectModalProps = {
@@ -339,12 +340,19 @@ export function ClientObjectModal({
       </div>
 
       {mode === 'edit' && clientId && initial?.id && (
-        <div className="mt-6 -mx-1">
+        <div className="mt-6 -mx-1 space-y-4">
+          <ObjectUnitsSection clientId={clientId} objectId={initial.id} />
           <PortalAccessSection
             clientId={clientId}
             objectId={initial.id}
             objectName={form.name}
           />
+        </div>
+      )}
+
+      {mode === 'closed' && clientId && initial?.id && (
+        <div className="mt-6 -mx-1">
+          <ObjectUnitsSection clientId={clientId} objectId={initial.id} readOnly />
         </div>
       )}
     </Modal>

@@ -20,6 +20,7 @@ export const portalIncidentsRouter = Router();
 const createSchema = z.object({
   client_id: z.string().uuid(),
   object_id: z.string().uuid(),
+  unit_id: z.string().uuid().optional(),
   title: z.string().min(1).max(255),
   description: z.string().optional(),
   priority: z.enum(['low', 'medium', 'high']).default('medium'),
@@ -45,6 +46,10 @@ type PortalIncidentRow = {
   resolution: string | null;
   client_name: string;
   object_name: string | null;
+  unit_id?: string | null;
+  unit_serial?: string | null;
+  unit_type?: string | null;
+  unit_model?: string | null;
   unread_count?: number;
 };
 
@@ -76,6 +81,7 @@ portalIncidentsRouter.get('/', async (req, res, next) => {
       `SELECT i.id, i.incident_number, i.client_id, i.object_id, i.title, i.description,
               i.status, i.priority, i.received_at, i.completed_at, i.resolution,
               c.name AS client_name, co.name AS object_name,
+              u.id AS unit_id, u.serial_number AS unit_serial, u.unit_type, u.model AS unit_model,
               (SELECT COUNT(*) FROM incident_messages m
                WHERE m.incident_id = i.id AND m.author_type = 'staff'
                AND m.created_at > COALESCE(
@@ -86,6 +92,7 @@ portalIncidentsRouter.get('/', async (req, res, next) => {
        FROM incidents i
        JOIN clients c ON c.id = i.client_id
        LEFT JOIN client_objects co ON co.id = i.object_id
+       LEFT JOIN units u ON u.id = i.unit_id
        ${where}
        ORDER BY i.received_at DESC
        LIMIT ? OFFSET ?`,
@@ -109,10 +116,12 @@ portalIncidentsRouter.get('/:id', async (req, res, next) => {
     const incident = await queryOne<PortalIncidentRow>(
       `SELECT i.id, i.incident_number, i.client_id, i.object_id, i.title, i.description,
               i.status, i.priority, i.received_at, i.completed_at, i.resolution,
-              c.name AS client_name, co.name AS object_name
+              c.name AS client_name, co.name AS object_name,
+              u.id AS unit_id, u.serial_number AS unit_serial, u.unit_type, u.model AS unit_model
        FROM incidents i
        JOIN clients c ON c.id = i.client_id
        LEFT JOIN client_objects co ON co.id = i.object_id
+       LEFT JOIN units u ON u.id = i.unit_id
        WHERE i.id = ?`,
       [req.params.id]
     );
@@ -131,6 +140,10 @@ portalIncidentsRouter.post('/', async (req, res, next) => {
 
     await assertCanCreateIncident(access, body.client_id, body.object_id);
 
+    if (body.unit_id) {
+      await assertUnitForIncident(body.unit_id, body.client_id, body.object_id);
+    }
+
     const reporter = await queryOne<{ full_name: string }>(
       'SELECT full_name FROM portal_users WHERE id = ?',
       [portalUserId]
@@ -141,14 +154,15 @@ portalIncidentsRouter.post('/', async (req, res, next) => {
 
     await query(
       `INSERT INTO incidents (
-        id, incident_number, client_id, object_id, reported_by, reported_via,
+        id, incident_number, client_id, object_id, unit_id, reported_by, reported_via,
         title, description, status, priority
-      ) VALUES (?, ?, ?, ?, ?, 'portal', ?, ?, 'pending', ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, 'portal', ?, ?, 'pending', ?)`,
       [
         id,
         incidentNumber,
         body.client_id,
         body.object_id,
+        body.unit_id ?? null,
         reporter?.full_name ?? 'Klienta portāls',
         body.title,
         body.description ?? null,
@@ -159,10 +173,12 @@ portalIncidentsRouter.post('/', async (req, res, next) => {
     const incident = await queryOne<PortalIncidentRow>(
       `SELECT i.id, i.incident_number, i.client_id, i.object_id, i.title, i.description,
               i.status, i.priority, i.received_at, i.completed_at, i.resolution,
-              c.name AS client_name, co.name AS object_name
+              c.name AS client_name, co.name AS object_name,
+              u.id AS unit_id, u.serial_number AS unit_serial, u.unit_type, u.model AS unit_model
        FROM incidents i
        JOIN clients c ON c.id = i.client_id
        LEFT JOIN client_objects co ON co.id = i.object_id
+       LEFT JOIN units u ON u.id = i.unit_id
        WHERE i.id = ?`,
       [id]
     );

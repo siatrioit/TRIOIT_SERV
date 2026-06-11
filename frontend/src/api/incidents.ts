@@ -10,6 +10,12 @@ export interface Incident {
   priority: string;
   received_at: string;
   due_at?: string;
+  object_id?: string | null;
+  unit_id?: string | null;
+  object_name?: string | null;
+  unit_serial?: string | null;
+  unit_type?: string | null;
+  unit_model?: string | null;
   unread_count?: number;
 }
 

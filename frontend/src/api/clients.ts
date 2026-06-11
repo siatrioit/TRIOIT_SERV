@@ -28,6 +28,8 @@ export interface Client {
   id: string;
   name: string;
   client_type: ClientType;
+  registration_number?: string;
+  vat_number?: string;
   address?: string;
   city?: string;
   postal_code?: string;
@@ -44,6 +46,8 @@ export interface Client {
 export interface ClientPayload {
   name: string;
   client_type: ClientType;
+  registration_number?: string;
+  vat_number?: string;
   address?: string;
   city?: string;
   postal_code?: string;

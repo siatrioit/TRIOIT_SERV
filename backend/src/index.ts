@@ -12,6 +12,9 @@ import { contractsRouter } from './routes/contracts';
 import { unitsRouter } from './routes/units';
 import { incidentsRouter } from './routes/incidents';
 import { incidentMessagesRouter } from './routes/incidentMessages';
+import { incidentWorkLogsRouter } from './routes/incidentWorkLogs';
+import { incidentMaterialsRouter } from './routes/incidentMaterials';
+import { warehouseRouter } from './routes/warehouse';
 import { servicesRouter } from './routes/services';
 import { invoicesRouter } from './routes/invoices';
 import { aiRouter } from './routes/ai';
@@ -21,6 +24,7 @@ import {
   objectPortalAccessRouter,
   portalAccessRouter,
 } from './routes/portalAccess';
+import { objectUnitsRouter } from './routes/objectUnits';
 import { portalRouter } from './routes/portal';
 import { runMigrations } from './db/migrate';
 import { APP_VERSION } from './version';
@@ -80,12 +84,16 @@ app.use(`${API_PREFIX}/users`, usersRouter);
 app.use(`${API_PREFIX}/portal-access`, portalAccessRouter);
 app.use(`${API_PREFIX}/clients/:clientId/objects/:objectId/portal-access`, objectPortalAccessRouter);
 app.use(`${API_PREFIX}/clients/:clientId/portal-access`, clientPortalAccessRouter);
+app.use(`${API_PREFIX}/clients/:clientId/objects/:objectId/units`, objectUnitsRouter);
 app.use(`${API_PREFIX}/clients/:clientId/objects`, clientObjectsRouter);
 app.use(`${API_PREFIX}/clients`, clientsRouter);
 app.use(`${API_PREFIX}/contracts`, contractsRouter);
 app.use(`${API_PREFIX}/units`, unitsRouter);
 app.use(`${API_PREFIX}/incidents/:incidentId/messages`, incidentMessagesRouter);
+app.use(`${API_PREFIX}/incidents/:incidentId/work-logs`, incidentWorkLogsRouter);
+app.use(`${API_PREFIX}/incidents/:incidentId/materials`, incidentMaterialsRouter);
 app.use(`${API_PREFIX}/incidents`, incidentsRouter);
+app.use(`${API_PREFIX}/warehouse`, warehouseRouter);
 app.use(`${API_PREFIX}/services`, servicesRouter);
 app.use(`${API_PREFIX}/invoices`, invoicesRouter);
 app.use(`${API_PREFIX}/ai`, aiRouter);

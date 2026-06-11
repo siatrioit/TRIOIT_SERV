@@ -1,17 +1,45 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { VoiceInputButton } from '../components/ai/VoiceInputButton';
+import { IncidentLocationPicker } from '../components/incidents/IncidentLocationPicker';
 import { aiApi } from '../api/ai';
+import { clientsApi } from '../api/clients';
 import { incidentsApi } from '../api/incidents';
 
 export function NewIncidentPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [clientId, setClientId] = useState('');
+  const [location, setLocation] = useState({
+    clientId: searchParams.get('clientId') || '',
+    objectId: searchParams.get('objectId') || '',
+    unitId: '',
+  });
   const [priority, setPriority] = useState('medium');
   const [needsReview, setNeedsReview] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const { data: clientDetail } = useQuery({
+    queryKey: ['client', location.clientId, 'validate'],
+    queryFn: () => clientsApi.get(location.clientId),
+    enabled: Boolean(location.clientId),
+  });
+
+  useEffect(() => {
+    if (!clientDetail?.data || location.objectId) return;
+    const objs = (clientDetail.data.objects || []).filter((o) => o.status !== 'closed');
+    if (objs.length === 1 && objs[0].id) {
+      setLocation((prev) => ({ ...prev, objectId: objs[0].id! }));
+    }
+  }, [clientDetail, location.objectId]);
+
+  const hasActiveObjects = useMemo(() => {
+    if (!clientDetail?.data.objects) return null;
+    return clientDetail.data.objects.some((o) => o.status !== 'closed');
+  }, [clientDetail]);
 
   const handleVoiceResult = (
     transcript: string,
@@ -21,7 +49,14 @@ export function NewIncidentPage() {
       const s = extraction.suggested_incident;
       setTitle((s.title as string) || '');
       setDescription((s.description as string) || transcript);
-      setClientId((s.client_id as string) || '');
+      if (s.client_id) {
+        setLocation((prev) => ({
+          ...prev,
+          clientId: s.client_id as string,
+          objectId: '',
+          unitId: '',
+        }));
+      }
       setPriority((s.priority as string) || 'medium');
       setNeedsReview(extraction.needs_review);
     } else {
@@ -31,16 +66,31 @@ export function NewIncidentPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clientId) return;
+    setError('');
+
+    if (!location.clientId) {
+      setError('Izvēlieties klientu');
+      return;
+    }
+
+    if (hasActiveObjects !== false && !location.objectId) {
+      setError('Izvēlieties objektu');
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await incidentsApi.create({
-        client_id: clientId,
+        client_id: location.clientId,
+        object_id: location.objectId || undefined,
+        unit_id: location.unitId || undefined,
         title,
         description,
         priority,
       });
       navigate(`/incidents/${res.data.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Neizdevās izveidot atgadījumu');
     } finally {
       setLoading(false);
     }
@@ -59,28 +109,25 @@ export function NewIncidentPage() {
 
       {needsReview && (
         <div className="bg-amber-50 text-amber-800 px-4 py-3 rounded-xl text-sm">
-          AI ieteikums prasa pārbaudi — lūdzu apstipriniet datus
+          AI ieteikums prasa pārbaudi — lūdzu apstipriniet klientu, objektu un ierīci
         </div>
       )}
 
+      {error && (
+        <div className="bg-red-50 text-red-700 px-4 py-3 rounded-xl text-sm">{error}</div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-4">
+        <IncidentLocationPicker value={location} onChange={setLocation} />
+
         <div>
-          <label className="block text-sm font-medium mb-1">Klienta ID</label>
-          <input
-            value={clientId}
-            onChange={(e) => setClientId(e.target.value)}
-            className="input-field"
-            required
-            placeholder="Klienta UUID"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Virsraksts</label>
+          <label className="block text-sm font-medium mb-1">Virsraksts *</label>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             className="input-field"
             required
+            placeholder="Problēmas īss apraksts"
           />
         </div>
         <div>

@@ -29,6 +29,46 @@ export async function queryOne<T = unknown>(
   return rows[0] ?? null;
 }
 
+/** MySQL transakcija (noliktavas kustības u.c.) */
+export async function withMysqlTransaction<T>(
+  fn: (conn: mysql.PoolConnection) => Promise<T>
+): Promise<T> {
+  if (dbType !== 'mysql') {
+    throw new Error('Transactions require MySQL');
+  }
+  const pool = getMysqlPool();
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const result = await fn(conn);
+    await conn.commit();
+    return result;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+export async function queryConn<T = unknown>(
+  conn: mysql.PoolConnection,
+  sql: string,
+  params: unknown[] = []
+): Promise<T[]> {
+  const [rows] = await conn.execute(sql, params as (string | number | boolean | null | Date)[]);
+  return rows as T[];
+}
+
+export async function queryOneConn<T = unknown>(
+  conn: mysql.PoolConnection,
+  sql: string,
+  params: unknown[] = []
+): Promise<T | null> {
+  const rows = await queryConn<T>(conn, sql, params);
+  return rows[0] ?? null;
+}
+
 let mysqlPool: mysql.Pool | null = null;
 let pgPool: PgPool | null = null;
 

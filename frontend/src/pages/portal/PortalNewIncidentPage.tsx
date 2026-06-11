@@ -1,8 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { ApiError } from '../../api/client';
 import { portalIncidentsApi } from '../../api/portalIncidents';
+import { portalUnitsApi } from '../../api/portalUnits';
+import { unitDisplayLabel } from '../../api/units';
 import { usePortalAuthStore, type PortalObject } from '../../store/portalAuthStore';
+
+function sortByName<T extends { name: string }>(items: T[]): T[] {
+  return [...items].sort((a, b) => a.name.localeCompare(b.name, 'lv'));
+}
 
 export function PortalNewIncidentPage() {
   const navigate = useNavigate();
@@ -10,37 +17,61 @@ export function PortalNewIncidentPage() {
   const access = usePortalAuthStore((s) => s.access);
   const user = usePortalAuthStore((s) => s.user);
 
-  const defaultObject = objects.length === 1 ? objects[0] : null;
+  const clients = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const grant of access) {
+      map.set(grant.client_id, grant.client_name);
+    }
+    return [...map.entries()].map(([id, name]) => ({ id, name })).sort((a, b) =>
+      a.name.localeCompare(b.name, 'lv')
+    );
+  }, [access]);
 
-  const [objectId, setObjectId] = useState(defaultObject?.id ?? '');
+  const [clientId, setClientId] = useState('');
+  const [objectId, setObjectId] = useState('');
+  const [unitId, setUnitId] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const filteredObjects = useMemo(
+    () => sortByName(objects.filter((o) => o.client_id === clientId)),
+    [objects, clientId]
+  );
+
   const selectedObject = useMemo(
     () => objects.find((o) => o.id === objectId),
     [objects, objectId]
   );
 
-  const clientNames = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const grant of access) {
-      map.set(grant.client_id, grant.client_name);
-    }
-    return map;
-  }, [access]);
+  const { data: unitsData } = useQuery({
+    queryKey: ['portal-units', objectId],
+    queryFn: () => portalUnitsApi.listForObject(objectId),
+    enabled: Boolean(objectId),
+  });
 
-  const objectsByClient = useMemo(() => {
-    const map = new Map<string, PortalObject[]>();
-    for (const obj of objects) {
-      const list = map.get(obj.client_id) ?? [];
-      list.push(obj);
-      map.set(obj.client_id, list);
+  const units = unitsData?.data ?? [];
+
+  useEffect(() => {
+    if (clients.length === 1) setClientId(clients[0].id);
+  }, [clients]);
+
+  useEffect(() => {
+    setObjectId('');
+    setUnitId('');
+  }, [clientId]);
+
+  useEffect(() => {
+    setUnitId('');
+  }, [objectId]);
+
+  useEffect(() => {
+    if (filteredObjects.length === 1 && filteredObjects[0].id) {
+      setObjectId(filteredObjects[0].id);
     }
-    return map;
-  }, [objects]);
+  }, [filteredObjects]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,6 +90,7 @@ export function PortalNewIncidentPage() {
       const res = await portalIncidentsApi.create({
         client_id: selectedObject.client_id,
         object_id: selectedObject.id,
+        unit_id: unitId || undefined,
         title: title.trim(),
         description: description.trim() || undefined,
         priority,
@@ -77,12 +109,14 @@ export function PortalNewIncidentPage() {
     }
   };
 
+  const showClientPicker = clients.length > 1;
+
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold">Jauns izsaukums</h2>
         <p className="text-sm text-gray-500 mt-1">
-          Aprakstiet problēmu — meistars saņems paziņojumu un sazināsies ar jums.
+          Izvēlieties objektu un ierīci, ja zināma — tad aprakstiet problēmu.
         </p>
       </div>
 
@@ -91,44 +125,80 @@ export function PortalNewIncidentPage() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {objects.length > 1 ? (
+        {showClientPicker && (
           <div>
-            <label className="block text-sm font-medium mb-1">Objekts *</label>
+            <label className="block text-sm font-medium mb-1">Klients *</label>
             <select
               className="input-field"
-              value={objectId}
-              onChange={(e) => setObjectId(e.target.value)}
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
               required
             >
-              <option value="">Izvēlieties objektu</option>
-              {[...objectsByClient.entries()].map(([clientId, clientObjects]) => (
-                <optgroup
-                  key={clientId}
-                  label={clientNames.get(clientId) || 'Objekti'}
-                >
-                  {clientObjects.map((obj) => (
-                    <option key={obj.id} value={obj.id}>
-                      {obj.name}
-                      {obj.city ? ` · ${obj.city}` : ''}
-                    </option>
-                  ))}
-                </optgroup>
+              <option value="">Izvēlieties klientu</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
               ))}
             </select>
           </div>
-        ) : selectedObject ? (
-          <div className="card bg-emerald-50 border-emerald-100">
-            <p className="text-sm text-gray-600">Objekts</p>
-            <p className="font-medium">{selectedObject.name}</p>
-            {(selectedObject.city || selectedObject.address) && (
-              <p className="text-sm text-gray-500">
-                {[selectedObject.city, selectedObject.address].filter(Boolean).join(', ')}
+        )}
+
+        {(clientId || !showClientPicker) && (
+          <div>
+            <label className="block text-sm font-medium mb-1">Objekts *</label>
+            {filteredObjects.length === 0 ? (
+              <p className="text-sm text-amber-700 bg-amber-50 px-3 py-2 rounded-xl">
+                Nav pieejamu objektu.
               </p>
+            ) : filteredObjects.length === 1 && selectedObject ? (
+              <div className="card bg-emerald-50 border-emerald-100">
+                <p className="font-medium">{selectedObject.name}</p>
+                {(selectedObject.city || selectedObject.address) && (
+                  <p className="text-sm text-gray-500">
+                    {[selectedObject.city, selectedObject.address].filter(Boolean).join(', ')}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <select
+                className="input-field"
+                value={objectId}
+                onChange={(e) => setObjectId(e.target.value)}
+                required
+              >
+                <option value="">Izvēlieties objektu</option>
+                {filteredObjects.map((obj: PortalObject) => (
+                  <option key={obj.id} value={obj.id}>
+                    {obj.name}
+                    {obj.city ? ` · ${obj.city}` : ''}
+                  </option>
+                ))}
+              </select>
             )}
           </div>
-        ) : (
-          <div className="card text-gray-500 text-sm text-center py-6">
-            Nav pieejamu objektu. Sazinieties ar TRIO SERV administratoru.
+        )}
+
+        {objectId && (
+          <div>
+            <label className="block text-sm font-medium mb-1">Ierīce (neobligāti)</label>
+            <select
+              className="input-field"
+              value={unitId}
+              onChange={(e) => setUnitId(e.target.value)}
+            >
+              <option value="">— Nav norādīta —</option>
+              {units.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {unitDisplayLabel(u)}
+                </option>
+              ))}
+            </select>
+            {units.length === 0 && (
+              <p className="text-xs text-gray-500 mt-1">
+                Šim objektam nav reģistrētu ierīču.
+              </p>
+            )}
           </div>
         )}
 
@@ -147,7 +217,7 @@ export function PortalNewIncidentPage() {
           <label className="block text-sm font-medium mb-1">Papildu informācija</label>
           <textarea
             className="input-field min-h-[120px]"
-            placeholder="Kad sākās, kas jau mēģināts, kontakttālrunis uz vietas..."
+            placeholder="Kad sākās, kas jau mēģināts..."
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={4}

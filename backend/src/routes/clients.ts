@@ -33,6 +33,10 @@ const clientSchema = z.object({
 
   client_type: z.enum(['company', 'private']).default('company'),
 
+  registration_number: optionalString,
+
+  vat_number: optionalString,
+
   address: optionalString,
 
   city: optionalString,
@@ -101,6 +105,7 @@ clientsRouter.get('/', async (req, res, next) => {
 
       where += ` AND (
         c.name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?
+        OR c.registration_number LIKE ? OR c.vat_number LIKE ?
         OR EXISTS (
           SELECT 1 FROM client_objects co
           WHERE co.client_id = c.id AND co.is_active = 1 AND co.status = 'active'
@@ -113,7 +118,7 @@ clientsRouter.get('/', async (req, res, next) => {
 
       const term = `%${search}%`;
 
-      params.push(term, term, term, term, term, term, term);
+      params.push(term, term, term, term, term, term, term, term, term);
 
     }
 
@@ -225,11 +230,11 @@ clientsRouter.post('/', authorize('admin', 'manager', 'technician'), async (req,
 
     await query(
 
-      `INSERT INTO clients (id, name, client_type, address, city, postal_code, country,
+      `INSERT INTO clients (id, name, client_type, registration_number, vat_number, address, city, postal_code, country,
 
         latitude, longitude, phone, email, representative, notes, created_by)
 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 
       [
 
@@ -238,6 +243,10 @@ clientsRouter.post('/', authorize('admin', 'manager', 'technician'), async (req,
         clientFields.name,
 
         clientFields.client_type,
+
+        clientFields.registration_number ?? null,
+
+        clientFields.vat_number ?? null,
 
         clientFields.address ?? null,
 

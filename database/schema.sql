@@ -47,6 +47,8 @@ CREATE TABLE clients (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name            VARCHAR(255) NOT NULL,
     client_type     client_type NOT NULL DEFAULT 'company',
+    registration_number VARCHAR(50),
+    vat_number      VARCHAR(50),
     address         TEXT,
     city            VARCHAR(100),
     postal_code     VARCHAR(20),

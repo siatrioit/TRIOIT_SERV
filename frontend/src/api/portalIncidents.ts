@@ -15,12 +15,17 @@ export interface PortalIncident {
   resolution?: string | null;
   client_name: string;
   object_name?: string | null;
+  unit_id?: string | null;
+  unit_serial?: string | null;
+  unit_type?: string | null;
+  unit_model?: string | null;
   unread_count?: number;
 }
 
 export interface CreatePortalIncidentPayload {
   client_id: string;
   object_id: string;
+  unit_id?: string;
   title: string;
   description?: string;
   priority?: 'low' | 'medium' | 'high';

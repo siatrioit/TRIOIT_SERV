@@ -6,12 +6,15 @@ import { query, queryOne } from '../db/pool';
 import { parsePagination, buildPaginationMeta } from '../utils/pagination';
 import { AppError } from '../middleware/errorHandler';
 import type { Incident } from '../models/types';
+import { resolveIncidentLocation } from '../services/incidentLocation';
+import { assertUnitForIncident } from '../services/units';
 
 export const incidentsRouter = Router();
 incidentsRouter.use(authenticate);
 
 const incidentSchema = z.object({
   client_id: z.string().uuid(),
+  object_id: z.string().uuid().optional(),
   unit_id: z.string().uuid().optional(),
   contract_id: z.string().uuid().optional(),
   reported_by: z.string().optional(),
@@ -89,8 +92,21 @@ incidentsRouter.get('/', async (req, res, next) => {
 
 incidentsRouter.get('/:id', async (req, res, next) => {
   try {
-    const incident = await queryOne<Incident>(
-      'SELECT * FROM incidents WHERE id = ?', [req.params.id]
+    const incident = await queryOne<
+      Incident & {
+        object_name?: string | null;
+        unit_serial?: string | null;
+        unit_type?: string | null;
+        unit_model?: string | null;
+      }
+    >(
+      `SELECT i.*, co.name AS object_name,
+              u.serial_number AS unit_serial, u.unit_type, u.model AS unit_model
+       FROM incidents i
+       LEFT JOIN client_objects co ON co.id = i.object_id
+       LEFT JOIN units u ON u.id = i.unit_id
+       WHERE i.id = ?`,
+      [req.params.id]
     );
     if (!incident) throw new AppError(404, 'Incident not found');
     res.json({ data: incident });
@@ -102,25 +118,27 @@ incidentsRouter.get('/:id', async (req, res, next) => {
 incidentsRouter.post('/', authorize('admin', 'manager', 'technician'), async (req, res, next) => {
   try {
     const body = incidentSchema.parse(req.body);
+    const location = await resolveIncidentLocation(body);
     const id = uuidv4();
     const incidentNumber = generateIncidentNumber();
 
     await query(
-      `INSERT INTO incidents (id, incident_number, client_id, unit_id, contract_id,
+      `INSERT INTO incidents (id, incident_number, client_id, object_id, unit_id, contract_id,
         reported_by, reported_via, title, description, status, priority, due_at,
         assigned_to, latitude, longitude, voice_transcript, ai_confidence, ai_metadata, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        id, incidentNumber, body.client_id, body.unit_id, body.contract_id,
+        id, incidentNumber, location.client_id, location.object_id, location.unit_id,
+        body.contract_id ?? null,
         body.reported_by, body.reported_via || 'web', body.title, body.description,
-        body.status, body.priority, body.due_at, body.assigned_to,
-        body.latitude, body.longitude, body.voice_transcript,
-        body.ai_confidence, body.ai_metadata ? JSON.stringify(body.ai_metadata) : null,
+        body.status, body.priority, body.due_at ?? null, body.assigned_to ?? null,
+        body.latitude ?? null, body.longitude ?? null, body.voice_transcript ?? null,
+        body.ai_confidence ?? null, body.ai_metadata ? JSON.stringify(body.ai_metadata) : null,
         req.user?.userId,
       ]
     );
 
-    const incident = await queryOne<Incident>('SELECT * FROM incidents WHERE id = ?', [id]);
+    const incident = await queryOne('SELECT * FROM incidents WHERE id = ?', [id]);
     res.status(201).json({ data: incident });
   } catch (err) {
     next(err);

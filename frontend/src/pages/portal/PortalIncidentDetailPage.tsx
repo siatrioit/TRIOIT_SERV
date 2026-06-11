@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { portalIncidentsApi } from '../../api/portalIncidents';
+import { formatIncidentUnit } from '../../utils/incidentUnit';
 import { IncidentMessageThread } from '../../components/incidents/IncidentMessageThread';
 import { PriorityBadge } from '../../components/incidents/PriorityBadge';
 import { StatusBadge } from '../../components/incidents/StatusBadge';
@@ -57,6 +58,12 @@ export function PortalIncidentDetailPage() {
           <div>
             <span className="text-gray-500">Objekts: </span>
             <span className="font-medium">{incident.object_name}</span>
+          </div>
+        )}
+        {formatIncidentUnit(incident) && (
+          <div>
+            <span className="text-gray-500">Ierīce: </span>
+            <span className="font-medium">{formatIncidentUnit(incident)}</span>
           </div>
         )}
         <div>
