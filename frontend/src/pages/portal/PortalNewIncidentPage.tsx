@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '../../api/client';
 import { portalIncidentsApi } from '../../api/portalIncidents';
 import { portalUnitsApi } from '../../api/portalUnits';
@@ -13,6 +13,7 @@ function sortByName<T extends { name: string }>(items: T[]): T[] {
 
 export function PortalNewIncidentPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const objects = usePortalAuthStore((s) => s.objects);
   const access = usePortalAuthStore((s) => s.access);
   const user = usePortalAuthStore((s) => s.user);
@@ -95,6 +96,7 @@ export function PortalNewIncidentPage() {
         description: description.trim() || undefined,
         priority,
       });
+      await queryClient.invalidateQueries({ queryKey: ['portal-incidents'] });
       navigate(`/portal/incidents/${res.data.id}`, { replace: true });
     } catch (err) {
       setError(

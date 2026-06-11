@@ -20,6 +20,22 @@ export type PortalObject = {
   status: string;
 };
 
+function normalizeScope(scope: string): 'client' | 'object' {
+  const value = String(scope).trim().toLowerCase();
+  return value === 'client' ? 'client' : 'object';
+}
+
+function grantObjectIds(grants: PortalAccessGrant[]): string[] {
+  return [
+    ...new Set(
+      grants
+        .filter((g) => normalizeScope(g.scope) === 'object' && g.object_id)
+        .map((g) => String(g.object_id).trim())
+        .filter(Boolean)
+    ),
+  ];
+}
+
 export async function getPortalUserAccess(portalUserId: string): Promise<PortalAccessGrant[]> {
   return query<PortalAccessGrant>(
     `SELECT pa.id, pa.client_id, pa.object_id, pa.scope,
@@ -45,7 +61,11 @@ export async function buildIncidentScopeClause(
   const params: unknown[] = [];
 
   const clientScopeIds = [
-    ...new Set(grants.filter((g) => g.scope === 'client').map((g) => g.client_id)),
+    ...new Set(
+      grants
+        .filter((g) => normalizeScope(g.scope) === 'client')
+        .map((g) => g.client_id)
+    ),
   ];
 
   for (const clientId of clientScopeIds) {
@@ -53,23 +73,26 @@ export async function buildIncidentScopeClause(
     params.push(clientId);
   }
 
-  // Bez klienta pieejas — tikai konkrētu objektu izsaukumi (arī admin panelī izveidotie)
-  if (clientScopeIds.length === 0) {
-    const accessibleObjects = await listAccessibleObjects(grants);
-    const objectIds = accessibleObjects.map((o) => o.id);
+  const objectScopeIds = grantObjectIds(grants);
 
-    if (objectIds.length === 1) {
+  if (clientScopeIds.length === 0) {
+    if (objectScopeIds.length === 1) {
       parts.push('i.object_id = ?');
-      params.push(objectIds[0]);
-    } else if (objectIds.length > 1) {
-      parts.push(`i.object_id IN (${objectIds.map(() => '?').join(', ')})`);
-      params.push(...objectIds);
+      params.push(objectScopeIds[0]);
+    } else if (objectScopeIds.length > 1) {
+      parts.push(`i.object_id IN (${objectScopeIds.map(() => '?').join(', ')})`);
+      params.push(...objectScopeIds);
     }
 
-    const objectClientIds = [
-      ...new Set(accessibleObjects.map((o) => o.client_id)),
+    const objectOnlyClientIds = [
+      ...new Set(
+        grants
+          .filter((g) => normalizeScope(g.scope) === 'object')
+          .map((g) => g.client_id)
+      ),
     ];
-    for (const clientId of objectClientIds) {
+
+    for (const clientId of objectOnlyClientIds) {
       parts.push('(i.client_id = ? AND i.object_id IS NULL)');
       params.push(clientId);
     }
@@ -106,9 +129,17 @@ export async function assertCanCreateIncident(
     throw new AppError(400, 'Objekts nav pieejams', 'INVALID_OBJECT');
   }
 
+  const normalizedObjectId = objectId.trim();
+
   const allowed = grants.some((g) => {
-    if (g.scope === 'client' && g.client_id === clientId) return true;
-    if (g.scope === 'object' && g.object_id === objectId) return true;
+    if (normalizeScope(g.scope) === 'client' && g.client_id === clientId) return true;
+    if (
+      normalizeScope(g.scope) === 'object' &&
+      g.object_id &&
+      String(g.object_id).trim() === normalizedObjectId
+    ) {
+      return true;
+    }
     return false;
   });
 
@@ -122,7 +153,8 @@ export async function assertCanAccessObject(
   objectId: string
 ): Promise<void> {
   const objects = await listAccessibleObjects(grants);
-  if (!objects.some((o) => o.id === objectId)) {
+  const normalized = objectId.trim();
+  if (!objects.some((o) => o.id.trim() === normalized)) {
     throw new AppError(403, 'Nav pieejas šim objektam', 'FORBIDDEN');
   }
 }
@@ -130,8 +162,14 @@ export async function assertCanAccessObject(
 export async function listAccessibleObjects(grants: PortalAccessGrant[]): Promise<PortalObject[]> {
   if (grants.length === 0) return [];
 
-  const clientIds = [...new Set(grants.filter((g) => g.scope === 'client').map((g) => g.client_id))];
-  const objectIds = grants.filter((g) => g.scope === 'object' && g.object_id).map((g) => g.object_id!);
+  const clientIds = [
+    ...new Set(
+      grants
+        .filter((g) => normalizeScope(g.scope) === 'client')
+        .map((g) => g.client_id)
+    ),
+  ];
+  const objectIds = grantObjectIds(grants);
 
   const results: PortalObject[] = [];
 

@@ -85,7 +85,10 @@ portalIncidentsRouter.get('/', async (req, res, next) => {
     }
 
     const countRow = await queryOne<{ total: number }>(
-      `SELECT COUNT(*) AS total FROM incidents i ${where}`,
+      `SELECT COUNT(*) AS total
+       FROM incidents i
+       JOIN clients c ON c.id = i.client_id
+       ${where}`,
       queryParams
     );
 
