@@ -7,7 +7,7 @@
 deployment:
   tasks:
     - export DEPLOYPATH=/home2/trioitlv/serv.trioit.lv
-    - mkdir -p $DEPLOYPATH/backend/dist $DEPLOYPATH/backend/public
-    - /bin/cp -R repo/web/dist/* $DEPLOYPATH/backend/dist/
-    - /bin/cp -R repo/web/public/* $DEPLOYPATH/backend/public/
-    - /bin/cp repo/web/package.json repo/web/package-lock.json $DEPLOYPATH/backend/
+    - /bin/cp -R web/dist $DEPLOYPATH/backend/
+    - /bin/cp -R web/public $DEPLOYPATH/backend/
+    - /bin/cp web/package.json $DEPLOYPATH/backend/
+    - /bin/cp web/package-lock.json $DEPLOYPATH/backend/ 2>/dev/null || true

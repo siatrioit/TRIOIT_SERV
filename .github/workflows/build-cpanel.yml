@@ -30,13 +30,13 @@ jobs:
         run: |
           cd frontend
           echo "VITE_API_URL=/api/v1" > .env.production
-          npm ci
+          npm install
           npm run build
 
       - name: Build backend
         run: |
           cd backend
-          npm ci
+          npm install
           npm run build
 
       - name: Prepare web/ for cPanel .cpanel.yml deploy
@@ -45,7 +45,8 @@ jobs:
           mkdir -p web/dist web/public
           cp -r backend/dist/* web/dist/
           cp -r frontend/dist/* web/public/
-          cp backend/package.json backend/package-lock.json web/
+          cp backend/package.json web/
+          cp backend/package-lock.json web/ 2>/dev/null || true
 
       - name: Commit web/ to repo
         run: |
