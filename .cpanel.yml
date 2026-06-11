@@ -1,17 +1,10 @@
 ---
-# Automātisks deploy (kā klientiem.edgarsfoto.lv)
-# Repo:  /home2/trioitlv/serv.trioit.lv/repo
-# Dzīve: /home2/trioitlv/serv.trioit.lv/backend
-# Node startup: server.js  |  pēc Deploy → Passenger restart
-
 deployment:
   tasks:
     - export DEPLOYPATH=/home2/trioitlv/serv.trioit.lv
-    - export REPOPATH=/home2/trioitlv/serv.trioit.lv/repo
-    - cd $REPOPATH
     - /bin/cp -R web/dist $DEPLOYPATH/backend/
     - /bin/cp -R web/public $DEPLOYPATH/backend/
-    - /bin/cp web/package.json web/server.js $DEPLOYPATH/backend/
-    - /bin/cp web/package-lock.json $DEPLOYPATH/backend/ 2>/dev/null || true
+    - /bin/cp web/package.json web/server.js web/package-lock.json $DEPLOYPATH/backend/
+    - /bin/cp -R web/database/migrations $DEPLOYPATH/backend/database/ 2>/dev/null || true
     - mkdir -p $DEPLOYPATH/backend/tmp
     - touch $DEPLOYPATH/backend/tmp/restart.txt

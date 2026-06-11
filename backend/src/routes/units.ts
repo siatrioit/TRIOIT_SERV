@@ -12,6 +12,7 @@ unitsRouter.use(authenticate);
 
 const unitSchema = z.object({
   client_id: z.string().uuid(),
+  object_id: z.string().uuid().optional(),
   contract_id: z.string().uuid().optional(),
   unit_type: z.enum(['computer', 'pos', 'printer', 'network', 'other']).default('other'),
   serial_number: z.string().min(1).max(100),
@@ -27,11 +28,13 @@ unitsRouter.get('/', async (req, res, next) => {
   try {
     const { page, limit, offset } = parsePagination(req.query as { page?: string; limit?: string });
     const clientId = req.query.client_id as string | undefined;
+    const objectId = req.query.object_id as string | undefined;
     const serial = req.query.serial_number as string | undefined;
 
     let where = 'WHERE 1=1';
     const params: unknown[] = [];
     if (clientId) { where += ' AND client_id = ?'; params.push(clientId); }
+    if (objectId) { where += ' AND object_id = ?'; params.push(objectId); }
     if (serial) { where += ' AND serial_number LIKE ?'; params.push(`%${serial}%`); }
 
     const countRow = await queryOne<{ total: number }>(
@@ -68,12 +71,12 @@ unitsRouter.post('/', authorize('admin', 'manager', 'technician'), async (req, r
     const id = uuidv4();
 
     await query(
-      `INSERT INTO units (id, client_id, contract_id, unit_type, serial_number, model,
+      `INSERT INTO units (id, client_id, object_id, contract_id, unit_type, serial_number, model,
         manufacturer, status, location_note, installed_at, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        id, body.client_id, body.contract_id, body.unit_type, body.serial_number,
-        body.model, body.manufacturer, body.status, body.location_note,
+        id, body.client_id, body.object_id ?? null, body.contract_id, body.unit_type,
+        body.serial_number, body.model, body.manufacturer, body.status, body.location_note,
         body.installed_at, body.notes,
       ]
     );

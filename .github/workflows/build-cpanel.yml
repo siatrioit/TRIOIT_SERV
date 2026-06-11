@@ -43,6 +43,8 @@ jobs:
           cp -r frontend/dist/* web/public/
           cp backend/package.json backend/server.js web/
           cp backend/package-lock.json web/ 2>/dev/null || true
+          mkdir -p web/database/migrations
+          cp -r database/migrations/* web/database/migrations/
 
       - name: Commit web/ to repo
         run: |

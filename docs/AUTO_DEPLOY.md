@@ -70,12 +70,44 @@ Pārbaudi: https://github.com/siatrioit/TRIOIT_SERV/actions — zaļš ✅
 
 ---
 
-## Ja Deploy atkal nestrādā
+## Deploy poga pelēka / "The system cannot deploy"
+
+cPanel prasa **abas**:
+1. derīgs `repo/.cpanel.yml`
+2. **nav** necommitotu izmaiņu serverī
+
+### Solis A — Update from Remote
+
+Vispirms spied **Update from Remote** (zila poga). Tikai pēc tam **Deploy HEAD Commit**.
+
+### Solis B — notīrīt necommitotās izmaiņas (bez Terminal)
+
+Biežākais iemesls: agrāk labots `.cpanel.yml` vai citi faili **File Manager** (serverī, ne GitHub).
+
+**File Manager** → `serv.trioit.lv/repo` → ieslēdz **Show Hidden Files**:
+
+1. Atver `.cpanel.yml` — saturam jāsakrīt ar [GitHub versiju](https://github.com/siatrioit/TRIOIT_SERV/blob/main/.cpanel.yml)
+2. Ja redzēsi arī `.cpanel.yml` ar paplašinājumu `.orig`, `.bak` — **dzēs** tos
+3. Atgriezies Git → **Update from Remote** → pārbaudi, vai **Deploy** kļūst aktīva
+
+### Solis C — tīrs re-clone (drošākais)
+
+Ja Deploy joprojām pelēks:
+
+1. **Git Version Control** → repo → **Delete** (noņem tikai Git saiti)
+2. **File Manager** → dzēs mapi `serv.trioit.lv/repo` pilnībā
+3. **Git Version Control** → **Create** → Clone:
+   - URL: `https://github.com/siatrioit/TRIOIT_SERV.git`
+   - Path: `serv.trioit.lv/repo`
+4. **Deploy HEAD Commit** — uz tīša klona parasti uzreiz strādā
+
+---
+
+## Citi iemesli
 
 1. GitHub Actions sarkans → `web/` netiek atjaunināts
 2. Nav **Update from Remote** pirms Deploy
-3. `.cpanel.yml` konflikts serverī → `git reset --hard origin/main` (cPanel Terminal) vai dzēs `.cpanel.yml` un pull
-4. Hosting bloķē `.cpanel.yml` → jautā atbalstam
+3. Hosting bloķē `.cpanel.yml` → jautā atbalstam
 
 ---
 

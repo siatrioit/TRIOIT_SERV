@@ -7,18 +7,37 @@ import dotenv from 'dotenv';
 import { errorHandler } from './middleware/errorHandler';
 import { authRouter } from './routes/auth';
 import { clientsRouter } from './routes/clients';
+import { clientObjectsRouter } from './routes/clientObjects';
 import { contractsRouter } from './routes/contracts';
 import { unitsRouter } from './routes/units';
 import { incidentsRouter } from './routes/incidents';
 import { servicesRouter } from './routes/services';
 import { invoicesRouter } from './routes/invoices';
 import { aiRouter } from './routes/ai';
+import { runMigrations } from './db/migrate';
 
 dotenv.config();
+
+const migrationsReady =
+  process.env.AUTO_MIGRATE === 'true'
+    ? runMigrations().catch((err) => {
+        console.error('[migrate] Startup migration failed:', err);
+        throw err;
+      })
+    : Promise.resolve();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 const API_PREFIX = process.env.API_PREFIX || '/api/v1';
+
+app.use(async (_req, _res, next) => {
+  try {
+    await migrationsReady;
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 // Security middleware
 app.use(helmet());
@@ -43,6 +62,7 @@ app.get('/health', (_req, res) => {
 
 // API routes
 app.use(`${API_PREFIX}/auth`, authRouter);
+app.use(`${API_PREFIX}/clients/:clientId/objects`, clientObjectsRouter);
 app.use(`${API_PREFIX}/clients`, clientsRouter);
 app.use(`${API_PREFIX}/contracts`, contractsRouter);
 app.use(`${API_PREFIX}/units`, unitsRouter);

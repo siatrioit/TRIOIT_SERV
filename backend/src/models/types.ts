@@ -27,6 +27,30 @@ export interface Client {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  objects?: ClientObject[];
+}
+
+/** Apkalpojamais objekts (veikals, birojs, noliktava u.c.) */
+export interface ClientObject {
+  id: string;
+  client_id: string;
+  name: string;
+  object_code?: string;
+  address?: string;
+  city?: string;
+  postal_code?: string;
+  country: string;
+  latitude?: number;
+  longitude?: number;
+  contact_name?: string;
+  contact_phone?: string;
+  contact_email?: string;
+  access_notes?: string;
+  notes?: string;
+  is_primary: boolean | number;
+  is_active: boolean | number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Contract {
@@ -48,6 +72,7 @@ export interface Contract {
 export interface Unit {
   id: string;
   client_id: string;
+  object_id?: string;
   contract_id?: string;
   unit_type: UnitType;
   serial_number: string;
@@ -77,6 +102,7 @@ export interface Incident {
   id: string;
   incident_number: string;
   client_id: string;
+  object_id?: string;
   unit_id?: string;
   contract_id?: string;
   reported_by?: string;

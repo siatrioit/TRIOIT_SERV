@@ -44,6 +44,35 @@ CREATE TABLE clients (
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- CLIENT OBJECTS (apkalpojamie objekti / atrašanās vietas pie klienta)
+CREATE TABLE client_objects (
+    id              CHAR(36) PRIMARY KEY,
+    client_id       CHAR(36) NOT NULL,
+    name            VARCHAR(255) NOT NULL,
+    object_code     VARCHAR(50),
+    address         TEXT,
+    city            VARCHAR(100),
+    postal_code     VARCHAR(20),
+    country         CHAR(2) NOT NULL DEFAULT 'LV',
+    latitude        DECIMAL(10,8),
+    longitude       DECIMAL(11,8),
+    contact_name    VARCHAR(255),
+    contact_phone   VARCHAR(50),
+    contact_email   VARCHAR(255),
+    access_notes    TEXT,
+    notes           TEXT,
+    is_primary      TINYINT(1) NOT NULL DEFAULT 0,
+    is_active       TINYINT(1) NOT NULL DEFAULT 1,
+    created_by      CHAR(36),
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE RESTRICT,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_client_objects_client (client_id),
+    INDEX idx_client_objects_city (city),
+    INDEX idx_client_objects_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- CONTRACTS
 CREATE TABLE contracts (
     id              CHAR(36) PRIMARY KEY,
@@ -70,6 +99,7 @@ CREATE TABLE contracts (
 CREATE TABLE units (
     id              CHAR(36) PRIMARY KEY,
     client_id       CHAR(36) NOT NULL,
+    object_id       CHAR(36),
     contract_id     CHAR(36),
     unit_type       ENUM('computer','pos','printer','network','other') NOT NULL DEFAULT 'other',
     serial_number   VARCHAR(100) NOT NULL UNIQUE,
@@ -82,8 +112,10 @@ CREATE TABLE units (
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE RESTRICT,
+    FOREIGN KEY (object_id) REFERENCES client_objects(id) ON DELETE SET NULL,
     FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE SET NULL,
     INDEX idx_units_client (client_id),
+    INDEX idx_units_object (object_id),
     INDEX idx_units_serial (serial_number)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -107,6 +139,7 @@ CREATE TABLE incidents (
     id              CHAR(36) PRIMARY KEY,
     incident_number VARCHAR(50) NOT NULL UNIQUE,
     client_id       CHAR(36) NOT NULL,
+    object_id       CHAR(36),
     unit_id         CHAR(36),
     contract_id     CHAR(36),
     reported_by     VARCHAR(255),
@@ -129,6 +162,7 @@ CREATE TABLE incidents (
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE RESTRICT,
+    FOREIGN KEY (object_id) REFERENCES client_objects(id) ON DELETE SET NULL,
     FOREIGN KEY (unit_id) REFERENCES units(id) ON DELETE SET NULL,
     FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE SET NULL,
     FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL,
