@@ -15,7 +15,7 @@ export function NewIncidentPage() {
   const [location, setLocation] = useState({
     clientId: searchParams.get('clientId') || '',
     objectId: searchParams.get('objectId') || '',
-    unitId: '',
+    unitId: searchParams.get('unitId') || '',
   });
   const [priority, setPriority] = useState('medium');
   const [needsReview, setNeedsReview] = useState(false);

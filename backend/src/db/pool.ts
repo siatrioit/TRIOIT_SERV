@@ -5,19 +5,28 @@ type DbType = 'mysql' | 'postgres';
 
 const dbType = (process.env.DB_TYPE || 'mysql') as DbType;
 
+type SqlParam = string | number | boolean | null | Date;
+
+/** mysql2 noraida undefined — konvertējam uz NULL */
+function normalizeParams(params: unknown[]): SqlParam[] {
+  return params.map((p) => (p === undefined ? null : p)) as SqlParam[];
+}
+
 /** Universal query helper — atbalsta gan MySQL (cPanel), gan PostgreSQL */
 export async function query<T = unknown>(
   sql: string,
   params: unknown[] = []
 ): Promise<T[]> {
+  const bound = normalizeParams(params);
+
   if (dbType === 'postgres') {
     const pool = getPgPool();
-    const result = await pool.query(sql, params);
+    const result = await pool.query(sql, bound);
     return result.rows as T[];
   }
 
   const pool = getMysqlPool();
-  const [rows] = await pool.execute(sql, params as (string | number | boolean | null | Date)[]);
+  const [rows] = await pool.execute(sql, bound);
   return rows as T[];
 }
 
@@ -56,7 +65,7 @@ export async function queryConn<T = unknown>(
   sql: string,
   params: unknown[] = []
 ): Promise<T[]> {
-  const [rows] = await conn.execute(sql, params as (string | number | boolean | null | Date)[]);
+  const [rows] = await conn.execute(sql, normalizeParams(params));
   return rows as T[];
 }
 

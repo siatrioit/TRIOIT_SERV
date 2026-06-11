@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import {
   UNIT_STATUS_LABELS,
@@ -8,6 +9,7 @@ import {
   type UnitStatus,
   type UnitType,
 } from '../../api/units';
+import { newIncidentUrl } from '../../utils/newIncidentUrl';
 import { Modal } from '../ui/Modal';
 
 const UNIT_TYPES: UnitType[] = ['computer', 'pos', 'printer', 'network', 'other'];
@@ -19,9 +21,10 @@ type UnitModalProps = {
   initial?: Unit | null;
   onClose: () => void;
   onSave: (data: UnitInput) => Promise<void>;
+  canStartIncident?: boolean;
 };
 
-export function UnitModal({ open, mode, initial, onClose, onSave }: UnitModalProps) {
+export function UnitModal({ open, mode, initial, onClose, onSave, canStartIncident }: UnitModalProps) {
   const [unitType, setUnitType] = useState<UnitType>('other');
   const [serialNumber, setSerialNumber] = useState('');
   const [model, setModel] = useState('');
@@ -85,13 +88,16 @@ export function UnitModal({ open, mode, initial, onClose, onSave }: UnitModalPro
     }
   };
 
+  const showIncidentLink =
+    canStartIncident && mode === 'edit' && initial?.object_id && initial.client_id;
+
   return (
     <Modal
       open={open}
       title={mode === 'create' ? 'Jauns klienta aktīvs' : 'Klienta aktīvs'}
       onClose={onClose}
       footer={
-        <>
+        <div className="flex flex-col-reverse sm:flex-row sm:flex-wrap gap-2 sm:justify-end w-full">
           <button type="button" className="btn-secondary w-full sm:w-auto" onClick={onClose}>
             Atcelt
           </button>
@@ -103,7 +109,20 @@ export function UnitModal({ open, mode, initial, onClose, onSave }: UnitModalPro
           >
             {saving ? 'Saglabā...' : 'Saglabāt'}
           </button>
-        </>
+          {showIncidentLink && (
+            <Link
+              to={newIncidentUrl({
+                clientId: initial.client_id,
+                objectId: initial.object_id,
+                unitId: initial.id,
+              })}
+              className="btn-primary w-full sm:w-auto text-center !bg-emerald-600 hover:!bg-emerald-700 sm:mr-auto"
+              onClick={onClose}
+            >
+              Jauns atgadījums
+            </Link>
+          )}
+        </div>
       }
     >
       {error && (

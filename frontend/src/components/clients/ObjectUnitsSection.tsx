@@ -116,6 +116,7 @@ export function ObjectUnitsSection({ clientId, objectId, readOnly }: ObjectUnits
           initial={modal.open && modal.mode === 'edit' ? modal.unit : null}
           onClose={() => setModal({ open: false })}
           onSave={handleSave}
+          canStartIncident={!readOnly}
         />
       )}
     </section>

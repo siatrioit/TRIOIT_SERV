@@ -76,12 +76,12 @@ export function IncidentLocationPicker({
   }, [selectedClient?.id, selectedClient?.name]);
 
   useEffect(() => {
-    if (!value.clientId || activeObjects.length !== 1) return;
+    if (!value.clientId || activeObjects.length !== 1 || value.objectId) return;
     const only = activeObjects[0];
-    if (only.id && value.objectId !== only.id) {
-      onChange({ clientId: value.clientId, objectId: only.id, unitId: '' });
+    if (only.id) {
+      onChange({ ...value, objectId: only.id });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- auto-select tikai klienta maiņai
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- auto-select objektu tikai ja nav izvēlēts
   }, [value.clientId, activeObjects.length, activeObjects[0]?.id]);
 
   const patch = (partial: Partial<IncidentLocationValue>) => {

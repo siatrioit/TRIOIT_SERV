@@ -15,7 +15,8 @@ import { useAuthStore } from '../store/authStore';
 
 export function CustomerAssetsPage() {
   const role = useAuthStore((s) => s.user?.role);
-  const canEdit = role === 'admin' || role === 'manager' || role === 'technician';
+  const canStartIncident = role === 'admin' || role === 'manager' || role === 'technician';
+  const canEdit = canStartIncident;
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -162,6 +163,7 @@ export function CustomerAssetsPage() {
             initial={editUnit}
             onClose={() => setEditUnit(null)}
             onSave={handleUpdate}
+            canStartIncident={canStartIncident}
           />
         </>
       )}

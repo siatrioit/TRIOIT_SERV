@@ -26,6 +26,7 @@ import {
 } from './routes/portalAccess';
 import { objectUnitsRouter } from './routes/objectUnits';
 import { portalRouter } from './routes/portal';
+import { mapRouter } from './routes/map';
 import { runMigrations } from './db/migrate';
 import { APP_VERSION } from './version';
 
@@ -93,6 +94,7 @@ app.use(`${API_PREFIX}/incidents/:incidentId/messages`, incidentMessagesRouter);
 app.use(`${API_PREFIX}/incidents/:incidentId/work-logs`, incidentWorkLogsRouter);
 app.use(`${API_PREFIX}/incidents/:incidentId/materials`, incidentMaterialsRouter);
 app.use(`${API_PREFIX}/incidents`, incidentsRouter);
+app.use(`${API_PREFIX}/map`, mapRouter);
 app.use(`${API_PREFIX}/warehouse`, warehouseRouter);
 app.use(`${API_PREFIX}/services`, servicesRouter);
 app.use(`${API_PREFIX}/invoices`, invoicesRouter);
