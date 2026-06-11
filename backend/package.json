@@ -1,10 +1,11 @@
 {
   "name": "trio-serv-api",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "TRIO-SERV Field Service Management API",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "prebuild": "node ../scripts/sync-version.js",
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "vitest run",

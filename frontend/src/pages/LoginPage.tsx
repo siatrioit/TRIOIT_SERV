@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
+import { AppBrand } from '../components/layout/AppBrand';
 import { useAuthStore } from '../store/authStore';
 
 export function LoginPage() {
@@ -31,7 +32,7 @@ export function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-primary-700">
       <form onSubmit={handleSubmit} className="card w-full max-w-sm space-y-4">
-        <h1 className="text-2xl font-bold text-center text-primary-700">TRIO-SERV</h1>
+        <AppBrand variant="login" />
         <p className="text-center text-gray-500 text-sm">Lauka servisa pārvaldība</p>
 
         {error && (

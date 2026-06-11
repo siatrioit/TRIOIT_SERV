@@ -15,6 +15,7 @@ import { servicesRouter } from './routes/services';
 import { invoicesRouter } from './routes/invoices';
 import { aiRouter } from './routes/ai';
 import { runMigrations } from './db/migrate';
+import { APP_VERSION } from './version';
 
 dotenv.config();
 
@@ -57,7 +58,11 @@ app.use(rateLimit({
 
 // Health check (cPanel monitoring)
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    version: APP_VERSION,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // API routes

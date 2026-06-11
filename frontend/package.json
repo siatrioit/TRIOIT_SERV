@@ -1,10 +1,11 @@
 {
   "name": "trio-serv-web",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node ../scripts/sync-version.js",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
