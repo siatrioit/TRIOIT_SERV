@@ -70,6 +70,29 @@ export const clientsApi = {
     api.put<{ data: Client }>(`/clients/${id}`, data),
 };
 
+/** Tīrs API payload — bez DB papildlaukiem un tukšām virknēm */
+export function sanitizeClientObject(o: ClientObjectInput): ClientObjectInput {
+  const trim = (s?: string) => {
+    const t = s?.trim();
+    return t || undefined;
+  };
+  return {
+    id: o.id,
+    name: o.name.trim(),
+    object_code: trim(o.object_code),
+    address: trim(o.address),
+    city: trim(o.city),
+    postal_code: trim(o.postal_code),
+    country: o.country || 'LV',
+    contact_name: trim(o.contact_name),
+    contact_phone: trim(o.contact_phone),
+    contact_email: trim(o.contact_email),
+    access_notes: trim(o.access_notes),
+    notes: trim(o.notes),
+    is_primary: Boolean(o.is_primary),
+  };
+}
+
 export function emptyObject(isPrimary = false): ClientObjectInput {
   return {
     name: '',

@@ -15,6 +15,7 @@ import { AppError } from '../middleware/errorHandler';
 import type { Client, ClientObject } from '../models/types';
 
 import { clientObjectInputSchema } from '../schemas/clientObject';
+import { optionalEmail, optionalString } from '../schemas/fields';
 
 import { insertClientObject, listClientObjects, syncClientObjects } from '../services/clientObjects';
 
@@ -32,11 +33,11 @@ const clientSchema = z.object({
 
   client_type: z.enum(['company', 'private']).default('company'),
 
-  address: z.string().optional(),
+  address: optionalString,
 
-  city: z.string().optional(),
+  city: optionalString,
 
-  postal_code: z.string().optional(),
+  postal_code: optionalString,
 
   country: z.string().length(2).default('LV'),
 
@@ -44,13 +45,13 @@ const clientSchema = z.object({
 
   longitude: z.number().min(-180).max(180).optional(),
 
-  phone: z.string().optional(),
+  phone: optionalString,
 
-  email: z.string().email().optional().or(z.literal('')),
+  email: optionalEmail,
 
-  representative: z.string().optional(),
+  representative: optionalString,
 
-  notes: z.string().optional(),
+  notes: optionalString,
 
 });
 

@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { clientsApi, emptyObject, type ClientObjectInput, type ClientType } from '../api/clients';
+import { ApiError } from '../api/client';
+import {
+  clientsApi,
+  emptyObject,
+  sanitizeClientObject,
+  type ClientObjectInput,
+  type ClientType,
+} from '../api/clients';
 
 export function ClientEditPage() {
   const { id } = useParams();
@@ -80,7 +87,7 @@ export function ClientEditPage() {
     setError('');
 
     const validObjects = objects
-      .map((o) => ({ ...o, name: o.name.trim() }))
+      .map(sanitizeClientObject)
       .filter((o) => o.name.length > 0);
 
     if (validObjects.length === 0) {
@@ -116,7 +123,13 @@ export function ClientEditPage() {
         navigate('/clients');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Saglabāšana neizdevās');
+      setError(
+        err instanceof ApiError
+          ? err.displayMessage
+          : err instanceof Error
+            ? err.message
+            : 'Saglabāšana neizdevās'
+      );
     } finally {
       setSaving(false);
     }

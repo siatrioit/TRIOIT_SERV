@@ -2,14 +2,23 @@ import { useAuthStore } from '../store/authStore';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
+export type ValidationDetail = { field: string; message: string };
+
 export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
-    public code?: string
+    public code?: string,
+    public details?: ValidationDetail[]
   ) {
     super(message);
     this.name = 'ApiError';
+  }
+
+  get displayMessage(): string {
+    if (!this.details?.length) return this.message;
+    const fields = this.details.map((d) => d.field).join(', ');
+    return `${this.message} (${fields})`;
   }
 }
 
@@ -35,7 +44,8 @@ async function request<T>(
     throw new ApiError(
       response.status,
       body.error || 'Request failed',
-      body.code
+      body.code,
+      body.details
     );
   }
 
