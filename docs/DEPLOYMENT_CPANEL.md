@@ -1,16 +1,19 @@
 # Deployment — cPanel + serv.trioit.lv
 
-## Arhitektūra (1 subdomain, 1 Node.js app)
+## Arhitektūra
 
 ```
-trioit.lv              → pamatlapa (public_html) — NETIEK SKARTA
-serv.trioit.lv         → TRIO-SERV (Setup Node.js App)
-  ├── /                → React frontend (PWA)
-  ├── /api/v1/...      → REST API
-  └── /health          → health check
+trioit.lv                    → pamatlapa (public_html) — NETIEK SKARTA
+serv.trioit.lv               → subdomain (Node.js apkalpo visu)
+  ├── /                      → React frontend
+  ├── /api/v1/...            → REST API
+  └── /health                → health check
+
+/home/user/TRIOIT_SERV/      → Git repo (atsevišķa mape!)
+/home/user/serv.trioit.lv/   → subdomain default faili — NETIEK LIETOTI
 ```
 
-**Otrs subdomain NAV vajadzīgs.** Viss serviss dzīvo uz `serv.trioit.lv`.
+**Git repo** liec mapē `TRIOIT_SERV`, ne `serv.trioit.lv` (tur jau ir `public_html`).
 
 ---
 

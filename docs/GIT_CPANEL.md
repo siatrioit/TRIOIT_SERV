@@ -41,12 +41,15 @@ git push -u origin main
 
 4. Admin lietotājs (pēc pirmā deploy):
    ```bash
-   cd ~/serv.trioit.lv/backend
+   cd ~/TRIOIT_SERV/backend
    node scripts/hash-password.js "TavaJaunaParole"
    ```
    Rezultātu ievieto phpMyAdmin → `users` tabula (skat. `database/seed-admin.sql`)
 
 ### 2. Git Version Control
+
+> **Svarīgi:** NEklonē uz `serv.trioit.lv` — tur jau ir subdomain faili (`public_html` u.c.).
+> Repo liec atsevišķā mapē, piem. `TRIOIT_SERV`.
 
 1. cPanel → **Git Version Control** → **Create**
 2. **Clone a Repository**:
@@ -54,9 +57,9 @@ git push -u origin main
 | Lauks | Vērtība |
 |-------|---------|
 | Clone URL | `https://github.com/siatrioit/TRIOIT_SERV.git` |
-| Repository Path | `serv.trioit.lv` |
+| Repository Path | `TRIOIT_SERV` |
 
-> Ceļš būs `/home/tavsuser/serv.trioit.lv`
+> Pilns ceļš: `/home/tavsuser/TRIOIT_SERV`
 
 3. Ja privāts repo — **SSH Key** vai **Access Token**:
    - Git Version Control → Manage → **SSH Keys** → ģenerē atslēgu
@@ -66,15 +69,13 @@ git push -u origin main
 
 ### 3. Labo `.cpanel.yml`
 
-Atver failu repozitorijā (cPanel File Manager vai nākamajā git push):
+`.cpanel.yml` failā aizvieto `TAVSUSER` ar cPanel lietotājvārdu:
 
 ```yaml
-deployment:
-  tasks:
-    - export DEPLOYPATH=/home/TAVSUSER/serv.trioit.lv
+- export DEPLOYPATH=/home/tavsuser/TRIOIT_SERV
 ```
 
-Aizvieto `TAVSUSER` ar savu cPanel lietotājvārdu.
+Commit + push, vai labo tieši serverī pēc klona.
 
 ### 4. Setup Node.js App
 
@@ -83,9 +84,11 @@ Aizvieto `TAVSUSER` ar savu cPanel lietotājvārdu.
 | Lauks | Vērtība |
 |-------|---------|
 | Node.js version | 18.x vai 20.x |
-| Application root | `serv.trioit.lv/backend` |
+| Application root | `TRIOIT_SERV/backend` |
 | Application URL | `serv.trioit.lv` |
 | Application startup file | `dist/index.js` |
+
+> `serv.trioit.lv/public_html` mapē esošie faili netiek lietoti — Node.js apkalpo visu subdomain.
 
 **Environment variables** (pievieno panelī):
 
@@ -104,7 +107,7 @@ CORS_ORIGIN=https://serv.trioit.lv
 
 ### 5. Pirmais deploy
 
-1. Git Version Control → repo `serv.trioit.lv`
+1. Git Version Control → repo `TRIOIT_SERV`
 2. Noklikšķini **Deploy HEAD Commit**
 3. Skaties deploy log — jāizpildās `scripts/deploy-cpanel.sh`
 4. **Setup Node.js App** → **Run NPM Install** → **Restart**
@@ -149,4 +152,5 @@ cPanel → Git repo → **Pull Deployment** — ieslēdz, lai push uz `main` aut
 | Clone failed | Pārbaudi GitHub URL / deploy key / token |
 | Deploy failed — npm not found | Labo ceļu `scripts/deploy-cpanel.sh` nodevenv aktivizācijai |
 | 502 pēc deploy | Run NPM Install + Restart Node.js app |
-| `.cpanel.yml` DEPLOYPATH nepareizs | Jābūt pilnam ceļam `/home/user/serv.trioit.lv` |
+| `.cpanel.yml` DEPLOYPATH nepareizs | Jābūt `/home/user/TRIOIT_SERV` (ne serv.trioit.lv!) |
+| Clone — mapē jau ir faili | Izmanto jaunu mapi `TRIOIT_SERV` |

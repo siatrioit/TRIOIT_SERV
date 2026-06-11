@@ -6,8 +6,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 # cPanel Node.js: izmanto app virtuālo vidi, ja pieejama
-if [ -f "$HOME/nodevenv/serv.trioit.lv/backend/18/bin/activate" ]; then
-  source "$HOME/nodevenv/serv.trioit.lv/backend/18/bin/activate"
+if [ -f "$HOME/nodevenv/TRIOIT_SERV/backend/18/bin/activate" ]; then
+  source "$HOME/nodevenv/TRIOIT_SERV/backend/18/bin/activate"
 elif [ -d "/opt/cpanel/ea-nodejs18/bin" ]; then
   export PATH="/opt/cpanel/ea-nodejs18/bin:$PATH"
 fi
