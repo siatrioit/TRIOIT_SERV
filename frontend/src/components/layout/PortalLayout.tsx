@@ -3,9 +3,10 @@ import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { portalAuthApi } from '../../api/portalAuth';
 import { usePortalAuthStore } from '../../store/portalAuthStore';
-import { APP_VERSION_LABEL } from '../../version';
+import { useAppVersionLabel } from '../../hooks/useAppVersionLabel';
 
 export function PortalLayout() {
+  const versionLabel = useAppVersionLabel();
   const user = usePortalAuthStore((s) => s.user);
   const logout = usePortalAuthStore((s) => s.logout);
   const setSession = usePortalAuthStore((s) => s.setSession);
@@ -38,7 +39,7 @@ export function PortalLayout() {
         <div className="flex items-center justify-between gap-3 max-w-lg lg:max-w-2xl mx-auto">
           <div>
             <h1 className="text-lg font-semibold">TRIO Klientu portāls</h1>
-            <p className="text-xs text-emerald-200">{APP_VERSION_LABEL}</p>
+            <p className="text-xs text-emerald-200">{versionLabel}</p>
           </div>
           {user && (
             <button

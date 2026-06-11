@@ -14,6 +14,7 @@ import {
   listIncidentMessages,
   markIncidentRead,
 } from '../../services/incidentMessages';
+import { assertUnitForIncident } from '../../services/units';
 
 export const portalIncidentsRouter = Router();
 
