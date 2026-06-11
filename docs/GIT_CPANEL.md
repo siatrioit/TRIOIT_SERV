@@ -73,10 +73,10 @@ git push -u origin main
 `.cpanel.yml` failā aizvieto `TAVSUSER` ar cPanel lietotājvārdu:
 
 ```yaml
-- export DEPLOYPATH=/home2/tavsuser/serv.trioit.lv/repo
+- export DEPLOYPATH=/home2/trioitlv/serv.trioit.lv
 ```
 
-Commit + push, vai labo tieši serverī pēc klona.
+**Nerediģē serverī** — tikai caur GitHub. Skat. [AUTO_DEPLOY.md](AUTO_DEPLOY.md).
 
 ### 4. Setup Node.js App
 
@@ -87,7 +87,7 @@ Commit + push, vai labo tieši serverī pēc klona.
 | Node.js version | 18.x vai 20.x |
 | Application root | **`serv.trioit.lv/backend`** (dzīvā mape pēc Deploy) |
 | Application URL | `serv.trioit.lv` |
-| Application startup file | `dist/index.js` |
+| Application startup file | **`server.js`** |
 
 > Deploy kopē no `repo/web/` uz `serv.trioit.lv/backend/` (kā edgarsfoto projektā).  
 > Node.js **neliec** uz `repo/backend` — liec uz `serv.trioit.lv/backend`.

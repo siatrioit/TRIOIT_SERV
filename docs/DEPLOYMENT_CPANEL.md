@@ -1,5 +1,7 @@
 # Deployment — cPanel + serv.trioit.lv
 
+> **Ikdienas deploy:** skat. [AUTO_DEPLOY.md](AUTO_DEPLOY.md) — `git push` + cPanel Deploy, bez roku kopēšanas.
+
 ## Arhitektūra
 
 ```

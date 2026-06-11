@@ -55,7 +55,7 @@ API: http://localhost:3001/api/v1
 
 ## cPanel izvietošana
 
-Skatīt [docs/DEPLOYMENT_CPANEL.md](docs/DEPLOYMENT_CPANEL.md) — frontend uz `public_html`, API caur Node.js Selector.
+Skatīt [docs/AUTO_DEPLOY.md](docs/AUTO_DEPLOY.md) — `git push` + cPanel Deploy (bez roku kopēšanas).
 
 ## Testi
 
