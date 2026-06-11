@@ -16,6 +16,8 @@ exports.clientsRouter.use(auth_1.authenticate);
 const clientSchema = zod_1.z.object({
     name: zod_1.z.string().min(1).max(255),
     client_type: zod_1.z.enum(['company', 'private']).default('company'),
+    registration_number: fields_1.optionalString,
+    vat_number: fields_1.optionalString,
     address: fields_1.optionalString,
     city: fields_1.optionalString,
     postal_code: fields_1.optionalString,
@@ -44,6 +46,7 @@ exports.clientsRouter.get('/', async (req, res, next) => {
         if (search) {
             where += ` AND (
         c.name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?
+        OR c.registration_number LIKE ? OR c.vat_number LIKE ?
         OR EXISTS (
           SELECT 1 FROM client_objects co
           WHERE co.client_id = c.id AND co.is_active = 1 AND co.status = 'active'
@@ -54,7 +57,7 @@ exports.clientsRouter.get('/', async (req, res, next) => {
         )
       )`;
             const term = `%${search}%`;
-            params.push(term, term, term, term, term, term, term);
+            params.push(term, term, term, term, term, term, term, term, term);
         }
         if (city) {
             where += ' AND c.city = ?';
@@ -100,14 +103,16 @@ exports.clientsRouter.post('/', (0, auth_1.authorize)('admin', 'manager', 'techn
         const body = createClientSchema.parse(req.body);
         const { objects, ...clientFields } = body;
         const id = (0, uuid_1.v4)();
-        await (0, pool_1.query)(`INSERT INTO clients (id, name, client_type, address, city, postal_code, country,
+        await (0, pool_1.query)(`INSERT INTO clients (id, name, client_type, registration_number, vat_number, address, city, postal_code, country,
 
         latitude, longitude, phone, email, representative, notes, created_by)
 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
             id,
             clientFields.name,
             clientFields.client_type,
+            clientFields.registration_number ?? null,
+            clientFields.vat_number ?? null,
             clientFields.address ?? null,
             clientFields.city ?? null,
             clientFields.postal_code ?? null,

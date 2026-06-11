@@ -12,6 +12,8 @@ export interface Client {
     id: string;
     name: string;
     client_type: ClientType;
+    registration_number?: string;
+    vat_number?: string;
     address?: string;
     city?: string;
     postal_code?: string;
@@ -172,5 +174,53 @@ export interface PaginatedResponse<T> {
         total: number;
         totalPages: number;
     };
+}
+export interface WarehouseItem {
+    id: string;
+    sku?: string;
+    name: string;
+    description?: string;
+    unit: string;
+    quantity_on_hand: number;
+    min_quantity?: number;
+    is_active: boolean | number;
+    created_at: string;
+    updated_at: string;
+}
+export interface WarehouseMovement {
+    id: string;
+    item_id: string;
+    movement_type: 'in' | 'out' | 'adjust';
+    quantity: number;
+    quantity_after: number;
+    reference_type?: string;
+    reference_id?: string;
+    notes?: string;
+    created_at: string;
+}
+export interface IncidentWorkLog {
+    id: string;
+    incident_id: string;
+    user_id?: string;
+    work_date: string;
+    duration_minutes: number;
+    description: string;
+    work_type?: string;
+    created_at: string;
+    user_name?: string;
+}
+export interface IncidentMaterial {
+    id: string;
+    incident_id: string;
+    warehouse_item_id: string;
+    quantity: number;
+    notes?: string;
+    used_at: string;
+    used_by?: string;
+    created_at: string;
+    item_name?: string;
+    item_unit?: string;
+    item_sku?: string;
+    used_by_name?: string;
 }
 //# sourceMappingURL=types.d.ts.map

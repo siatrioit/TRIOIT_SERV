@@ -5,6 +5,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.query = query;
 exports.queryOne = queryOne;
+exports.withMysqlTransaction = withMysqlTransaction;
+exports.queryConn = queryConn;
+exports.queryOneConn = queryOneConn;
 const promise_1 = __importDefault(require("mysql2/promise"));
 const pg_1 = require("pg");
 const dbType = (process.env.DB_TYPE || 'mysql');
@@ -21,6 +24,35 @@ async function query(sql, params = []) {
 }
 async function queryOne(sql, params = []) {
     const rows = await query(sql, params);
+    return rows[0] ?? null;
+}
+/** MySQL transakcija (noliktavas kustības u.c.) */
+async function withMysqlTransaction(fn) {
+    if (dbType !== 'mysql') {
+        throw new Error('Transactions require MySQL');
+    }
+    const pool = getMysqlPool();
+    const conn = await pool.getConnection();
+    try {
+        await conn.beginTransaction();
+        const result = await fn(conn);
+        await conn.commit();
+        return result;
+    }
+    catch (err) {
+        await conn.rollback();
+        throw err;
+    }
+    finally {
+        conn.release();
+    }
+}
+async function queryConn(conn, sql, params = []) {
+    const [rows] = await conn.execute(sql, params);
+    return rows;
+}
+async function queryOneConn(conn, sql, params = []) {
+    const rows = await queryConn(conn, sql, params);
     return rows[0] ?? null;
 }
 let mysqlPool = null;

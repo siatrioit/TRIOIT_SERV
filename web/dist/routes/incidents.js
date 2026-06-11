@@ -8,10 +8,12 @@ const auth_1 = require("../middleware/auth");
 const pool_1 = require("../db/pool");
 const pagination_1 = require("../utils/pagination");
 const errorHandler_1 = require("../middleware/errorHandler");
+const incidentLocation_1 = require("../services/incidentLocation");
 exports.incidentsRouter = (0, express_1.Router)();
 exports.incidentsRouter.use(auth_1.authenticate);
 const incidentSchema = zod_1.z.object({
     client_id: zod_1.z.string().uuid(),
+    object_id: zod_1.z.string().uuid().optional(),
     unit_id: zod_1.z.string().uuid().optional(),
     contract_id: zod_1.z.string().uuid().optional(),
     reported_by: zod_1.z.string().optional(),
@@ -85,7 +87,12 @@ exports.incidentsRouter.get('/', async (req, res, next) => {
 });
 exports.incidentsRouter.get('/:id', async (req, res, next) => {
     try {
-        const incident = await (0, pool_1.queryOne)('SELECT * FROM incidents WHERE id = ?', [req.params.id]);
+        const incident = await (0, pool_1.queryOne)(`SELECT i.*, co.name AS object_name,
+              u.serial_number AS unit_serial, u.unit_type, u.model AS unit_model
+       FROM incidents i
+       LEFT JOIN client_objects co ON co.id = i.object_id
+       LEFT JOIN units u ON u.id = i.unit_id
+       WHERE i.id = ?`, [req.params.id]);
         if (!incident)
             throw new errorHandler_1.AppError(404, 'Incident not found');
         res.json({ data: incident });
@@ -97,17 +104,19 @@ exports.incidentsRouter.get('/:id', async (req, res, next) => {
 exports.incidentsRouter.post('/', (0, auth_1.authorize)('admin', 'manager', 'technician'), async (req, res, next) => {
     try {
         const body = incidentSchema.parse(req.body);
+        const location = await (0, incidentLocation_1.resolveIncidentLocation)(body);
         const id = (0, uuid_1.v4)();
         const incidentNumber = generateIncidentNumber();
-        await (0, pool_1.query)(`INSERT INTO incidents (id, incident_number, client_id, unit_id, contract_id,
+        await (0, pool_1.query)(`INSERT INTO incidents (id, incident_number, client_id, object_id, unit_id, contract_id,
         reported_by, reported_via, title, description, status, priority, due_at,
         assigned_to, latitude, longitude, voice_transcript, ai_confidence, ai_metadata, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
-            id, incidentNumber, body.client_id, body.unit_id, body.contract_id,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+            id, incidentNumber, location.client_id, location.object_id, location.unit_id,
+            body.contract_id ?? null,
             body.reported_by, body.reported_via || 'web', body.title, body.description,
-            body.status, body.priority, body.due_at, body.assigned_to,
-            body.latitude, body.longitude, body.voice_transcript,
-            body.ai_confidence, body.ai_metadata ? JSON.stringify(body.ai_metadata) : null,
+            body.status, body.priority, body.due_at ?? null, body.assigned_to ?? null,
+            body.latitude ?? null, body.longitude ?? null, body.voice_transcript ?? null,
+            body.ai_confidence ?? null, body.ai_metadata ? JSON.stringify(body.ai_metadata) : null,
             req.user?.userId,
         ]);
         const incident = await (0, pool_1.queryOne)('SELECT * FROM incidents WHERE id = ?', [id]);

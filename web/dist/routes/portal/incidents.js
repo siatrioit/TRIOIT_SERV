@@ -9,10 +9,12 @@ const errorHandler_1 = require("../../middleware/errorHandler");
 const pagination_1 = require("../../utils/pagination");
 const portalScope_1 = require("../../services/portalScope");
 const incidentMessages_1 = require("../../services/incidentMessages");
+const units_1 = require("../../services/units");
 exports.portalIncidentsRouter = (0, express_1.Router)();
 const createSchema = zod_1.z.object({
     client_id: zod_1.z.string().uuid(),
     object_id: zod_1.z.string().uuid(),
+    unit_id: zod_1.z.string().uuid().optional(),
     title: zod_1.z.string().min(1).max(255),
     description: zod_1.z.string().optional(),
     priority: zod_1.z.enum(['low', 'medium', 'high']).default('medium'),
@@ -41,6 +43,7 @@ exports.portalIncidentsRouter.get('/', async (req, res, next) => {
         const incidents = await (0, pool_1.query)(`SELECT i.id, i.incident_number, i.client_id, i.object_id, i.title, i.description,
               i.status, i.priority, i.received_at, i.completed_at, i.resolution,
               c.name AS client_name, co.name AS object_name,
+              u.id AS unit_id, u.serial_number AS unit_serial, u.unit_type, u.model AS unit_model,
               (SELECT COUNT(*) FROM incident_messages m
                WHERE m.incident_id = i.id AND m.author_type = 'staff'
                AND m.created_at > COALESCE(
@@ -51,6 +54,7 @@ exports.portalIncidentsRouter.get('/', async (req, res, next) => {
        FROM incidents i
        JOIN clients c ON c.id = i.client_id
        LEFT JOIN client_objects co ON co.id = i.object_id
+       LEFT JOIN units u ON u.id = i.unit_id
        ${where}
        ORDER BY i.received_at DESC
        LIMIT ? OFFSET ?`, [...queryParams, portalUserId, limit, offset]);
@@ -69,10 +73,12 @@ exports.portalIncidentsRouter.get('/:id', async (req, res, next) => {
         await (0, portalScope_1.assertCanViewIncident)(access, req.params.id);
         const incident = await (0, pool_1.queryOne)(`SELECT i.id, i.incident_number, i.client_id, i.object_id, i.title, i.description,
               i.status, i.priority, i.received_at, i.completed_at, i.resolution,
-              c.name AS client_name, co.name AS object_name
+              c.name AS client_name, co.name AS object_name,
+              u.id AS unit_id, u.serial_number AS unit_serial, u.unit_type, u.model AS unit_model
        FROM incidents i
        JOIN clients c ON c.id = i.client_id
        LEFT JOIN client_objects co ON co.id = i.object_id
+       LEFT JOIN units u ON u.id = i.unit_id
        WHERE i.id = ?`, [req.params.id]);
         if (!incident)
             throw new errorHandler_1.AppError(404, 'Izsaukums nav atrasts', 'NOT_FOUND');
@@ -87,17 +93,21 @@ exports.portalIncidentsRouter.post('/', async (req, res, next) => {
         const { portalUserId, access } = req.portalUser;
         const body = createSchema.parse(req.body);
         await (0, portalScope_1.assertCanCreateIncident)(access, body.client_id, body.object_id);
+        if (body.unit_id) {
+            await (0, units_1.assertUnitForIncident)(body.unit_id, body.client_id, body.object_id);
+        }
         const reporter = await (0, pool_1.queryOne)('SELECT full_name FROM portal_users WHERE id = ?', [portalUserId]);
         const id = (0, uuid_1.v4)();
         const incidentNumber = generateIncidentNumber();
         await (0, pool_1.query)(`INSERT INTO incidents (
-        id, incident_number, client_id, object_id, reported_by, reported_via,
+        id, incident_number, client_id, object_id, unit_id, reported_by, reported_via,
         title, description, status, priority
-      ) VALUES (?, ?, ?, ?, ?, 'portal', ?, ?, 'pending', ?)`, [
+      ) VALUES (?, ?, ?, ?, ?, ?, 'portal', ?, ?, 'pending', ?)`, [
             id,
             incidentNumber,
             body.client_id,
             body.object_id,
+            body.unit_id ?? null,
             reporter?.full_name ?? 'Klienta portāls',
             body.title,
             body.description ?? null,
@@ -105,10 +115,12 @@ exports.portalIncidentsRouter.post('/', async (req, res, next) => {
         ]);
         const incident = await (0, pool_1.queryOne)(`SELECT i.id, i.incident_number, i.client_id, i.object_id, i.title, i.description,
               i.status, i.priority, i.received_at, i.completed_at, i.resolution,
-              c.name AS client_name, co.name AS object_name
+              c.name AS client_name, co.name AS object_name,
+              u.id AS unit_id, u.serial_number AS unit_serial, u.unit_type, u.model AS unit_model
        FROM incidents i
        JOIN clients c ON c.id = i.client_id
        LEFT JOIN client_objects co ON co.id = i.object_id
+       LEFT JOIN units u ON u.id = i.unit_id
        WHERE i.id = ?`, [id]);
         res.status(201).json({ data: incident });
     }
