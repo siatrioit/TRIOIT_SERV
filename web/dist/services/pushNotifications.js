@@ -13,11 +13,25 @@ exports.notifyNewIncident = notifyNewIncident;
 exports.notifyPortalChatMessage = notifyPortalChatMessage;
 exports.notifyIncidentReassigned = notifyIncidentReassigned;
 const crypto_1 = __importDefault(require("crypto"));
-const web_push_1 = __importDefault(require("web-push"));
+const module_1 = require("module");
 const uuid_1 = require("uuid");
 const pool_1 = require("../db/pool");
 const incidentAssignment_1 = require("./incidentAssignment");
+const loadModule = (0, module_1.createRequire)(__filename);
 let vapidConfigured = false;
+let webPushLib;
+function getWebPushLib() {
+    if (webPushLib === undefined) {
+        try {
+            webPushLib = loadModule('web-push');
+        }
+        catch {
+            webPushLib = null;
+            console.warn('[push] web-push nav instalēts — push izslēgts, API strādā normāli');
+        }
+    }
+    return webPushLib;
+}
 function configureVapid() {
     if (vapidConfigured)
         return true;
@@ -26,12 +40,19 @@ function configureVapid() {
     const subject = process.env.VAPID_SUBJECT?.trim() || 'mailto:admin@trioit.lv';
     if (!publicKey || !privateKey)
         return false;
-    web_push_1.default.setVapidDetails(subject, publicKey, privateKey);
+    const webpush = getWebPushLib();
+    if (!webpush)
+        return false;
+    webpush.setVapidDetails(subject, publicKey, privateKey);
     vapidConfigured = true;
     return true;
 }
 function isPushConfigured() {
-    return configureVapid();
+    const publicKey = process.env.VAPID_PUBLIC_KEY?.trim();
+    const privateKey = process.env.VAPID_PRIVATE_KEY?.trim();
+    if (!publicKey || !privateKey)
+        return false;
+    return getWebPushLib() !== null;
 }
 function getVapidPublicKey() {
     return process.env.VAPID_PUBLIC_KEY?.trim() || null;
@@ -71,6 +92,9 @@ async function deleteSubscriptionById(id) {
 async function sendPushToUsers(userIds, payload, excludeUserId) {
     if (!configureVapid())
         return;
+    const webpush = getWebPushLib();
+    if (!webpush)
+        return;
     const recipients = [...new Set(userIds.filter((id) => id && id !== excludeUserId))];
     if (recipients.length === 0)
         return;
@@ -78,7 +102,7 @@ async function sendPushToUsers(userIds, payload, excludeUserId) {
     const body = JSON.stringify(payload);
     await Promise.all(subscriptions.map(async (sub) => {
         try {
-            await web_push_1.default.sendNotification({
+            await webpush.sendNotification({
                 endpoint: sub.endpoint,
                 keys: { p256dh: sub.p256dh, auth: sub.auth },
             }, body);
