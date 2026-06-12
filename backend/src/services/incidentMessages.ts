@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne } from '../db/pool';
 import { AppError } from '../middleware/errorHandler';
 import { assertCanViewIncident, type PortalAccessGrant } from './portalScope';
+import { assertPortalCanSendChat } from './portalPermissions';
 
 export type IncidentMessage = {
   id: string;
@@ -61,6 +62,7 @@ export async function addPortalMessage(
   body: string
 ): Promise<IncidentMessage> {
   await assertCanViewIncident(grants, incidentId);
+  await assertPortalCanSendChat(grants, incidentId);
 
   const user = await queryOne<{ full_name: string }>(
     'SELECT full_name FROM portal_users WHERE id = ? AND is_active = 1',

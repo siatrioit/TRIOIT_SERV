@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { portalAuthApi } from '../../api/portalAuth';
 import { usePortalAuthStore } from '../../store/portalAuthStore';
+import { portalUserCanWrite } from '../../utils/portalPermissions';
 import { useAppVersionLabel } from '../../hooks/useAppVersionLabel';
 
 export function PortalLayout() {
@@ -32,6 +33,8 @@ export function PortalLayout() {
   const hasClientWide = usePortalAuthStore((s) =>
     s.access.some((a) => a.scope === 'client')
   );
+  const access = usePortalAuthStore((s) => s.access);
+  const canWrite = portalUserCanWrite(access);
 
   return (
     <div className="min-h-screen flex flex-col pb-20 bg-gray-50">
@@ -83,9 +86,13 @@ export function PortalLayout() {
             to="/portal/incidents/new"
             className={({ isActive }) =>
               `flex flex-col items-center min-w-[72px] text-xs font-medium ${
-                isActive ? 'text-emerald-700' : 'text-gray-500'
+                isActive ? 'text-emerald-700' : canWrite ? 'text-gray-500' : 'text-gray-300 pointer-events-none'
               }`
             }
+            aria-disabled={!canWrite}
+            onClick={(e) => {
+              if (!canWrite) e.preventDefault();
+            }}
           >
             <span className="text-xl bg-emerald-600 text-white rounded-full w-10 h-10 flex items-center justify-center -mt-4 shadow-md">
               +

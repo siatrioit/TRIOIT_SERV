@@ -27,6 +27,7 @@ import {
 import { objectUnitsRouter } from './routes/objectUnits';
 import { portalRouter } from './routes/portal';
 import { mapRouter } from './routes/map';
+import { portalUsersRouter } from './routes/portalUsers';
 import { pushRouter } from './routes/push';
 import { runMigrations } from './db/migrate';
 import { APP_VERSION } from './version';
@@ -83,6 +84,7 @@ app.get('/health', (_req, res) => {
 app.use(`${API_PREFIX}/auth`, authRouter);
 app.use(`${API_PREFIX}/portal`, portalRouter);
 app.use(`${API_PREFIX}/users`, usersRouter);
+app.use(`${API_PREFIX}/portal-users`, portalUsersRouter);
 app.use(`${API_PREFIX}/push`, pushRouter);
 app.use(`${API_PREFIX}/portal-access`, portalAccessRouter);
 app.use(`${API_PREFIX}/clients/:clientId/objects/:objectId/portal-access`, objectPortalAccessRouter);

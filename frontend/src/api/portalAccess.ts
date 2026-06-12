@@ -1,6 +1,7 @@
 import { api } from './client';
 
 export type PortalScope = 'client' | 'object';
+export type PortalRole = 'viewer' | 'operator' | 'manager';
 
 export interface PortalAccessRow {
   id: string;
@@ -8,6 +9,7 @@ export interface PortalAccessRow {
   client_id: string;
   object_id?: string | null;
   scope: PortalScope;
+  portal_role: PortalRole;
   is_active: boolean | number;
   created_at: string;
   email: string;
@@ -22,6 +24,7 @@ export interface CreatePortalAccessPayload {
   full_name: string;
   phone?: string;
   password?: string;
+  portal_role?: PortalRole;
 }
 
 export const portalAccessApi = {

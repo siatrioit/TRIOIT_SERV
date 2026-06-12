@@ -12,6 +12,7 @@ export type PortalAccessRow = {
   client_id: string;
   object_id: string | null;
   scope: 'client' | 'object';
+  portal_role: 'viewer' | 'operator' | 'manager';
   is_active: boolean | number;
   created_at: string;
   email: string;
@@ -33,7 +34,7 @@ export async function listPortalAccess(
 ): Promise<PortalAccessRow[]> {
   if (objectId) {
     return query<PortalAccessRow>(
-      `SELECT pa.id, pa.portal_user_id, pa.client_id, pa.object_id, pa.scope, pa.is_active,
+      `SELECT pa.id, pa.portal_user_id, pa.client_id, pa.object_id, pa.scope, pa.portal_role, pa.is_active,
               pa.created_at, pu.email, pu.full_name, pu.phone, pu.is_active AS user_active,
               co.name AS object_name
        FROM portal_access pa
@@ -46,7 +47,7 @@ export async function listPortalAccess(
   }
 
   return query<PortalAccessRow>(
-    `SELECT pa.id, pa.portal_user_id, pa.client_id, pa.object_id, pa.scope, pa.is_active,
+    `SELECT pa.id, pa.portal_user_id, pa.client_id, pa.object_id, pa.scope, pa.portal_role, pa.is_active,
             pa.created_at, pu.email, pu.full_name, pu.phone, pu.is_active AS user_active,
             co.name AS object_name
      FROM portal_access pa
@@ -131,9 +132,9 @@ export async function grantClientPortalAccess(
 
   const accessId = uuidv4();
   await query(
-    `INSERT INTO portal_access (id, portal_user_id, client_id, scope, created_by)
-     VALUES (?, ?, ?, 'client', ?)`,
-    [accessId, userId, clientId, createdBy ?? null]
+    `INSERT INTO portal_access (id, portal_user_id, client_id, scope, portal_role, created_by)
+     VALUES (?, ?, ?, 'client', ?, ?)`,
+    [accessId, userId, clientId, input.portal_role ?? 'operator', createdBy ?? null]
   );
 
   const rows = await listPortalAccess(clientId);
@@ -161,9 +162,9 @@ export async function grantObjectPortalAccess(
 
   const accessId = uuidv4();
   await query(
-    `INSERT INTO portal_access (id, portal_user_id, client_id, object_id, scope, created_by)
-     VALUES (?, ?, ?, ?, 'object', ?)`,
-    [accessId, userId, clientId, objectId, createdBy ?? null]
+    `INSERT INTO portal_access (id, portal_user_id, client_id, object_id, scope, portal_role, created_by)
+     VALUES (?, ?, ?, ?, 'object', ?, ?)`,
+    [accessId, userId, clientId, objectId, input.portal_role ?? 'operator', createdBy ?? null]
   );
 
   const rows = await listPortalAccess(clientId, objectId);

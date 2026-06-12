@@ -133,7 +133,11 @@ export function StaffUserModal({
         <div className="bg-red-50 text-red-700 px-4 py-3 rounded-xl text-sm mb-4">{error}</div>
       )}
 
-      <div className="space-y-3">
+        <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4">
+          Esošo paroli nevar parādīt — tā ir šifrēta. Ievadiet jaunu vai nospiediet Ģenerēt.
+        </p>
+
+        <div className="space-y-3">
         <input
           className="input-field"
           placeholder="Vārds, uzvārds *"
@@ -168,13 +172,29 @@ export function StaffUserModal({
             ))}
           </select>
         </div>
-        <input
-          type="password"
-          className="input-field"
-          placeholder={mode === 'create' ? 'Parole * (min. 8)' : 'Jauna parole (atstāt tukšu, lai nemainītu)'}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+        <div className="flex gap-2">
+          <input
+            type="password"
+            className="input-field flex-1"
+            placeholder={mode === 'create' ? 'Parole * (min. 8)' : 'Jauna parole (atstāt tukšu, lai nemainītu)'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <button
+            type="button"
+            className="btn-secondary !py-2 !px-3 !min-h-0 text-sm shrink-0"
+            onClick={() => {
+              const chars = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+              let result = '';
+              for (let i = 0; i < 12; i++) {
+                result += chars[Math.floor(Math.random() * chars.length)];
+              }
+              setPassword(result);
+            }}
+          >
+            Ģenerēt
+          </button>
+        </div>
         {mode === 'edit' && (
           <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer py-1">
             <input

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '../../api/client';
 import { portalAccessApi, type CreatePortalAccessPayload } from '../../api/portalAccess';
+import { PORTAL_ROLE_LABELS, type PortalRole } from '../../api/portalUsers';
 import { useAuthStore } from '../../store/authStore';
 import { Modal } from '../ui/Modal';
 
@@ -26,6 +27,7 @@ export function PortalAccessSection({
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [portalRole, setPortalRole] = useState<PortalRole>('operator');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [tempPassword, setTempPassword] = useState<string | null>(null);
@@ -49,6 +51,7 @@ export function PortalAccessSection({
     setFullName('');
     setPhone('');
     setPassword('');
+    setPortalRole('operator');
     setError('');
     setShowForm(false);
   };
@@ -68,6 +71,7 @@ export function PortalAccessSection({
       full_name: fullName.trim(),
       phone: phone.trim() || undefined,
       password: password.trim() || undefined,
+      portal_role: portalRole,
     };
 
     setSaving(true);
@@ -169,6 +173,13 @@ export function PortalAccessSection({
                     {row.scope === 'client'
                       ? 'Pieeja visam klientam'
                       : `Tikai objekts: ${row.object_name || '—'}`}
+                    {' · '}
+                    {PORTAL_ROLE_LABELS[row.portal_role]}
+                  </p>
+                )}
+                {objectId && (
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {PORTAL_ROLE_LABELS[row.portal_role]}
                   </p>
                 )}
               </div>
@@ -242,6 +253,23 @@ export function PortalAccessSection({
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
+          <div>
+            <label className="text-sm text-gray-600 mb-1 block">Loma portālā</label>
+            <select
+              className="input-field"
+              value={portalRole}
+              onChange={(e) => setPortalRole(e.target.value as PortalRole)}
+            >
+              {(Object.keys(PORTAL_ROLE_LABELS) as PortalRole[]).map((role) => (
+                <option key={role} value={role}>
+                  {PORTAL_ROLE_LABELS[role]}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Skatītājs — tikai skatīt. Operators — arī izveidot izsaukumus un čatu.
+            </p>
+          </div>
         </div>
       </Modal>
 

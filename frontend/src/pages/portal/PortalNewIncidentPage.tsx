@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '../../api/client';
 import { portalIncidentsApi } from '../../api/portalIncidents';
 import { portalUnitsApi } from '../../api/portalUnits';
 import { unitDisplayLabel } from '../../api/units';
 import { usePortalAuthStore, type PortalObject } from '../../store/portalAuthStore';
+import { portalUserCanWrite } from '../../utils/portalPermissions';
 
 function sortByName<T extends { name: string }>(items: T[]): T[] {
   return [...items].sort((a, b) => a.name.localeCompare(b.name, 'lv'));
@@ -17,6 +18,10 @@ export function PortalNewIncidentPage() {
   const objects = usePortalAuthStore((s) => s.objects);
   const access = usePortalAuthStore((s) => s.access);
   const user = usePortalAuthStore((s) => s.user);
+
+  if (!portalUserCanWrite(access)) {
+    return <Navigate to="/portal" replace />;
+  }
 
   const clients = useMemo(() => {
     const map = new Map<string, string>();

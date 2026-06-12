@@ -1,7 +1,9 @@
-import { Link, useParams } from 'react-router-dom';
+import { Link, Navigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { portalIncidentsApi } from '../../api/portalIncidents';
 import { formatIncidentUnit } from '../../utils/incidentUnit';
+import { portalUserCanWrite } from '../../utils/portalPermissions';
+import { usePortalAuthStore } from '../../store/portalAuthStore';
 import { IncidentMessageThread } from '../../components/incidents/IncidentMessageThread';
 import { PriorityBadge } from '../../components/incidents/PriorityBadge';
 import { StatusBadge } from '../../components/incidents/StatusBadge';
@@ -15,6 +17,8 @@ function formatDate(value: string) {
 
 export function PortalIncidentDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const access = usePortalAuthStore((s) => s.access);
+  const canPost = portalUserCanWrite(access);
   const { data, isLoading } = useQuery({
     queryKey: ['portal-incident', id],
     queryFn: () => portalIncidentsApi.get(id!),
@@ -95,6 +99,7 @@ export function PortalIncidentDetailPage() {
         <IncidentMessageThread
           incidentId={id}
           variant="portal"
+          canPost={canPost}
           incidentClosed={
             incident.status === 'completed' || incident.status === 'cancelled'
           }

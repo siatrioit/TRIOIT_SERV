@@ -1,11 +1,13 @@
 import { query, queryOne } from '../db/pool';
 import { AppError } from '../middleware/errorHandler';
+import { assertPortalCanCreateIncident } from './portalPermissions';
 
 export type PortalAccessGrant = {
   id: string;
   client_id: string;
   object_id: string | null;
   scope: 'client' | 'object';
+  portal_role: 'viewer' | 'operator' | 'manager';
   client_name: string;
   object_name?: string | null;
 };
@@ -38,7 +40,7 @@ function grantObjectIds(grants: PortalAccessGrant[]): string[] {
 
 export async function getPortalUserAccess(portalUserId: string): Promise<PortalAccessGrant[]> {
   return query<PortalAccessGrant>(
-    `SELECT pa.id, pa.client_id, pa.object_id, pa.scope,
+    `SELECT pa.id, pa.client_id, pa.object_id, pa.scope, pa.portal_role,
             c.name AS client_name, co.name AS object_name
      FROM portal_access pa
      JOIN clients c ON c.id = pa.client_id AND c.is_active = 1
@@ -146,6 +148,8 @@ export async function assertCanCreateIncident(
   if (!allowed) {
     throw new AppError(403, 'Nav tiesību reģistrēt izsaukumu šim objektam', 'FORBIDDEN');
   }
+
+  assertPortalCanCreateIncident(grants, clientId, normalizedObjectId);
 }
 
 export async function assertCanAccessObject(
