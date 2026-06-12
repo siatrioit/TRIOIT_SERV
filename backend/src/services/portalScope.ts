@@ -79,24 +79,32 @@ export async function buildIncidentScopeClause(
 
   if (clientScopeIds.length === 0) {
     if (objectScopeIds.length === 1) {
+      const objectId = objectScopeIds[0];
       parts.push('i.object_id = ?');
-      params.push(objectScopeIds[0]);
+      params.push(objectId);
+      parts.push(
+        'i.unit_id IN (SELECT u.id FROM units u WHERE u.object_id = ?)'
+      );
+      params.push(objectId);
     } else if (objectScopeIds.length > 1) {
-      parts.push(`i.object_id IN (${objectScopeIds.map(() => '?').join(', ')})`);
+      const placeholders = objectScopeIds.map(() => '?').join(', ');
+      parts.push(`i.object_id IN (${placeholders})`);
+      params.push(...objectScopeIds);
+      parts.push(
+        `i.unit_id IN (SELECT u.id FROM units u WHERE u.object_id IN (${placeholders}))`
+      );
       params.push(...objectScopeIds);
     }
 
-    const objectOnlyClientIds = [
-      ...new Set(
-        grants
-          .filter((g) => normalizeScope(g.scope) === 'object')
-          .map((g) => g.client_id)
-      ),
-    ];
-
-    for (const clientId of objectOnlyClientIds) {
-      parts.push('(i.client_id = ? AND i.object_id IS NULL)');
-      params.push(clientId);
+    // Vecāki izsaukumi bez object_id — tikai ja pieejams viens objekts
+    if (objectScopeIds.length === 1) {
+      const clientId = grants.find(
+        (g) => normalizeScope(g.scope) === 'object' && g.object_id === objectScopeIds[0]
+      )?.client_id;
+      if (clientId) {
+        parts.push('(i.client_id = ? AND i.object_id IS NULL)');
+        params.push(clientId);
+      }
     }
   }
 
