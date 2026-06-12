@@ -38,18 +38,27 @@ async function request<T>(
     headers,
   });
 
-  const body = await response.json().catch(() => ({}));
+  const text = await response.text();
+  let body: Record<string, unknown> = {};
+  try {
+    body = text ? JSON.parse(text) : {};
+  } catch {
+    if (response.status === 503) {
+      throw new ApiError(503, 'Serveris īslaicīgi nav pieejams. cPanel → Node.js → Restart.');
+    }
+    throw new ApiError(response.status, 'Servera kļūda — API neatbild');
+  }
 
   if (!response.ok) {
     throw new ApiError(
       response.status,
-      body.error || 'Request failed',
-      body.code,
-      body.details
+      (body.error as string) || 'Request failed',
+      body.code as string | undefined,
+      body.details as ValidationDetail[] | undefined
     );
   }
 
-  return body;
+  return body as T;
 }
 
 export const api = {

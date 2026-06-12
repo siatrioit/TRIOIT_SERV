@@ -1,8 +1,18 @@
 import crypto from 'crypto';
-import webpush from 'web-push';
+import { createRequire } from 'module';
 import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne } from '../db/pool';
 import { listAssignableStaffUserIds } from './incidentAssignment';
+
+const loadModule = createRequire(__filename);
+
+type WebPushModule = {
+  setVapidDetails: (subject: string, publicKey: string, privateKey: string) => void;
+  sendNotification: (
+    subscription: { endpoint: string; keys: { p256dh: string; auth: string } },
+    payload: string
+  ) => Promise<unknown>;
+};
 
 export type PushPayload = {
   title: string;
@@ -20,6 +30,19 @@ type PushSubscriptionRow = {
 };
 
 let vapidConfigured = false;
+let webPushLib: WebPushModule | null | undefined;
+
+function getWebPushLib(): WebPushModule | null {
+  if (webPushLib === undefined) {
+    try {
+      webPushLib = loadModule('web-push') as WebPushModule;
+    } catch {
+      webPushLib = null;
+      console.warn('[push] web-push nav instalēts — push izslēgts, API strādā normāli');
+    }
+  }
+  return webPushLib;
+}
 
 function configureVapid(): boolean {
   if (vapidConfigured) return true;
@@ -30,13 +53,19 @@ function configureVapid(): boolean {
 
   if (!publicKey || !privateKey) return false;
 
+  const webpush = getWebPushLib();
+  if (!webpush) return false;
+
   webpush.setVapidDetails(subject, publicKey, privateKey);
   vapidConfigured = true;
   return true;
 }
 
 export function isPushConfigured(): boolean {
-  return configureVapid();
+  const publicKey = process.env.VAPID_PUBLIC_KEY?.trim();
+  const privateKey = process.env.VAPID_PRIVATE_KEY?.trim();
+  if (!publicKey || !privateKey) return false;
+  return getWebPushLib() !== null;
 }
 
 export function getVapidPublicKey(): string | null {
@@ -106,6 +135,9 @@ export async function sendPushToUsers(
   excludeUserId?: string | null
 ): Promise<void> {
   if (!configureVapid()) return;
+
+  const webpush = getWebPushLib();
+  if (!webpush) return;
 
   const recipients = [...new Set(userIds.filter((id) => id && id !== excludeUserId))];
   if (recipients.length === 0) return;
