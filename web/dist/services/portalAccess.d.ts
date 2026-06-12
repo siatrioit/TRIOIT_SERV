@@ -6,6 +6,7 @@ export type PortalAccessRow = {
     client_id: string;
     object_id: string | null;
     scope: 'client' | 'object';
+    portal_role: 'viewer' | 'operator' | 'manager';
     is_active: boolean | number;
     created_at: string;
     email: string;

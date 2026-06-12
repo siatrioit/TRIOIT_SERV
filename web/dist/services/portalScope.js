@@ -8,6 +8,7 @@ exports.assertCanAccessObject = assertCanAccessObject;
 exports.listAccessibleObjects = listAccessibleObjects;
 const pool_1 = require("../db/pool");
 const errorHandler_1 = require("../middleware/errorHandler");
+const portalPermissions_1 = require("./portalPermissions");
 function normalizeScope(scope) {
     const value = String(scope).trim().toLowerCase();
     return value === 'client' ? 'client' : 'object';
@@ -21,7 +22,7 @@ function grantObjectIds(grants) {
     ];
 }
 async function getPortalUserAccess(portalUserId) {
-    return (0, pool_1.query)(`SELECT pa.id, pa.client_id, pa.object_id, pa.scope,
+    return (0, pool_1.query)(`SELECT pa.id, pa.client_id, pa.object_id, pa.scope, pa.portal_role,
             c.name AS client_name, co.name AS object_name
      FROM portal_access pa
      JOIN clients c ON c.id = pa.client_id AND c.is_active = 1
@@ -94,6 +95,7 @@ async function assertCanCreateIncident(grants, clientId, objectId) {
     if (!allowed) {
         throw new errorHandler_1.AppError(403, 'Nav tiesību reģistrēt izsaukumu šim objektam', 'FORBIDDEN');
     }
+    (0, portalPermissions_1.assertPortalCanCreateIncident)(grants, clientId, normalizedObjectId);
 }
 async function assertCanAccessObject(grants, objectId) {
     const objects = await listAccessibleObjects(grants);

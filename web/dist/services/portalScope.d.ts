@@ -3,6 +3,7 @@ export type PortalAccessGrant = {
     client_id: string;
     object_id: string | null;
     scope: 'client' | 'object';
+    portal_role: 'viewer' | 'operator' | 'manager';
     client_name: string;
     object_name?: string | null;
 };

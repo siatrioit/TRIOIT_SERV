@@ -11,6 +11,7 @@ const uuid_1 = require("uuid");
 const pool_1 = require("../db/pool");
 const errorHandler_1 = require("../middleware/errorHandler");
 const portalScope_1 = require("./portalScope");
+const portalPermissions_1 = require("./portalPermissions");
 async function assertIncidentExists(incidentId) {
     const row = await (0, pool_1.queryOne)('SELECT id FROM incidents WHERE id = ?', [incidentId]);
     if (!row)
@@ -35,6 +36,7 @@ async function addStaffMessage(incidentId, staffUserId, body) {
 }
 async function addPortalMessage(incidentId, portalUserId, grants, body) {
     await (0, portalScope_1.assertCanViewIncident)(grants, incidentId);
+    await (0, portalPermissions_1.assertPortalCanSendChat)(grants, incidentId);
     const user = await (0, pool_1.queryOne)('SELECT full_name FROM portal_users WHERE id = ? AND is_active = 1', [portalUserId]);
     if (!user)
         throw new errorHandler_1.AppError(403, 'Lietotājs nav aktīvs', 'FORBIDDEN');

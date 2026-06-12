@@ -17,7 +17,7 @@ function generatePassword() {
 }
 async function listPortalAccess(clientId, objectId) {
     if (objectId) {
-        return (0, pool_1.query)(`SELECT pa.id, pa.portal_user_id, pa.client_id, pa.object_id, pa.scope, pa.is_active,
+        return (0, pool_1.query)(`SELECT pa.id, pa.portal_user_id, pa.client_id, pa.object_id, pa.scope, pa.portal_role, pa.is_active,
               pa.created_at, pu.email, pu.full_name, pu.phone, pu.is_active AS user_active,
               co.name AS object_name
        FROM portal_access pa
@@ -26,7 +26,7 @@ async function listPortalAccess(clientId, objectId) {
        WHERE pa.client_id = ? AND pa.object_id = ? AND pa.is_active = 1
        ORDER BY pu.full_name ASC`, [clientId, objectId]);
     }
-    return (0, pool_1.query)(`SELECT pa.id, pa.portal_user_id, pa.client_id, pa.object_id, pa.scope, pa.is_active,
+    return (0, pool_1.query)(`SELECT pa.id, pa.portal_user_id, pa.client_id, pa.object_id, pa.scope, pa.portal_role, pa.is_active,
             pa.created_at, pu.email, pu.full_name, pu.phone, pu.is_active AS user_active,
             co.name AS object_name
      FROM portal_access pa
@@ -77,8 +77,8 @@ async function grantClientPortalAccess(clientId, input, createdBy) {
     const { userId, temporaryPassword } = await findOrCreatePortalUser(input, createdBy);
     await assertAccessNotDuplicate(userId, clientId, 'client');
     const accessId = (0, uuid_1.v4)();
-    await (0, pool_1.query)(`INSERT INTO portal_access (id, portal_user_id, client_id, scope, created_by)
-     VALUES (?, ?, ?, 'client', ?)`, [accessId, userId, clientId, createdBy ?? null]);
+    await (0, pool_1.query)(`INSERT INTO portal_access (id, portal_user_id, client_id, scope, portal_role, created_by)
+     VALUES (?, ?, ?, 'client', ?, ?)`, [accessId, userId, clientId, input.portal_role ?? 'operator', createdBy ?? null]);
     const rows = await listPortalAccess(clientId);
     const access = rows.find((r) => r.id === accessId);
     if (!access)
@@ -93,8 +93,8 @@ async function grantObjectPortalAccess(clientId, objectId, input, createdBy) {
     const { userId, temporaryPassword } = await findOrCreatePortalUser(input, createdBy);
     await assertAccessNotDuplicate(userId, clientId, 'object', objectId);
     const accessId = (0, uuid_1.v4)();
-    await (0, pool_1.query)(`INSERT INTO portal_access (id, portal_user_id, client_id, object_id, scope, created_by)
-     VALUES (?, ?, ?, ?, 'object', ?)`, [accessId, userId, clientId, objectId, createdBy ?? null]);
+    await (0, pool_1.query)(`INSERT INTO portal_access (id, portal_user_id, client_id, object_id, scope, portal_role, created_by)
+     VALUES (?, ?, ?, ?, 'object', ?, ?)`, [accessId, userId, clientId, objectId, input.portal_role ?? 'operator', createdBy ?? null]);
     const rows = await listPortalAccess(clientId, objectId);
     const access = rows.find((r) => r.id === accessId);
     if (!access)
