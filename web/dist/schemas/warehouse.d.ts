@@ -8,13 +8,13 @@ export declare const warehouseItemInputSchema: z.ZodObject<{
 }, "strip", z.ZodTypeAny, {
     name: string;
     unit: string;
-    description?: string | undefined;
     sku?: string | undefined;
+    description?: string | undefined;
     min_quantity?: number | undefined;
 }, {
     name: string;
-    description?: unknown;
     sku?: unknown;
+    description?: unknown;
     unit?: string | undefined;
     min_quantity?: unknown;
 }>;

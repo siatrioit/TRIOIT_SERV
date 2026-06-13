@@ -21,16 +21,16 @@ export declare const productInputSchema: z.ZodObject<{
 }, "strip", z.ZodTypeAny, {
     name: string;
     unit: string;
-    description?: string | undefined;
     sku?: string | undefined;
+    description?: string | undefined;
     min_quantity?: number | null | undefined;
     group_id?: string | null | undefined;
     purchase_price?: number | null | undefined;
     sale_price?: number | null | undefined;
 }, {
     name: string;
-    description?: unknown;
     sku?: unknown;
+    description?: unknown;
     unit?: string | undefined;
     min_quantity?: number | null | undefined;
     group_id?: string | null | undefined;

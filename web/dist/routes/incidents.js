@@ -1,4 +1,7 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.incidentsRouter = void 0;
 const express_1 = require("express");
@@ -18,6 +21,8 @@ const unitActivity_1 = require("../services/unitActivity");
 const unitStatusSync_1 = require("../services/unitStatusSync");
 const incidentActivity_1 = require("../services/incidentActivity");
 const incidentStatuses_2 = require("../services/incidentStatuses");
+const incidentCompletion_1 = require("../services/incidentCompletion");
+const fs_1 = __importDefault(require("fs"));
 exports.incidentsRouter = (0, express_1.Router)();
 exports.incidentsRouter.use(auth_1.authenticate);
 async function actorFromReq(req) {
@@ -106,7 +111,7 @@ exports.incidentsRouter.get('/', async (req, res, next) => {
       LEFT JOIN asset_type_components ac ON ac.id = i.asset_component_id`;
         const countRow = await (0, pool_1.queryOne)(`SELECT COUNT(*) as total ${fromClause} ${where}`, params);
         const staffUserId = req.user.userId;
-        const incidents = await (0, pool_1.query)(`SELECT i.*,
+        const rows = await (0, pool_1.query)(`SELECT i.*,
               c.name AS client_name,
               co.name AS object_name,
               au.full_name AS assigned_user_name,
@@ -114,17 +119,14 @@ exports.incidentsRouter.get('/', async (req, res, next) => {
               u.unit_type,
               u.model AS unit_model,
               at.name AS asset_type_name,
-              ac.name AS asset_component_name,
-        (SELECT COUNT(*) FROM incident_messages m
-         WHERE m.incident_id = i.id AND m.author_type = 'portal'
-         AND m.created_at > COALESCE(
-           (SELECT r.last_read_at FROM incident_message_reads r
-            WHERE r.incident_id = i.id AND r.reader_type = 'staff' AND r.reader_id = ?),
-           '1970-01-01 00:00:00'
-         )) AS unread_count
+              ac.name AS asset_component_name
        ${fromClause}
        ${where}
-       ORDER BY i.received_at DESC LIMIT ? OFFSET ?`, [...params, staffUserId, limit, offset]);
+       ORDER BY i.received_at DESC LIMIT ? OFFSET ?`, [...params, limit, offset]);
+        const incidents = await Promise.all(rows.map(async (row) => ({
+            ...row,
+            unread_count: await (0, incidentMessages_1.countUnreadForStaff)(row.id, staffUserId),
+        })));
         res.json({
             data: incidents,
             pagination: (0, pagination_1.buildPaginationMeta)(countRow?.total ?? 0, page, limit),
@@ -141,6 +143,72 @@ exports.incidentsRouter.get('/:id/activity', async (req, res, next) => {
             throw new errorHandler_1.AppError(404, 'Incident not found');
         const entries = await (0, incidentActivity_1.listIncidentActivity)(req.params.id);
         res.json({ data: entries });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+exports.incidentsRouter.get('/:id/completion', async (req, res, next) => {
+    try {
+        const existing = await (0, pool_1.queryOne)('SELECT id FROM incidents WHERE id = ?', [req.params.id]);
+        if (!existing)
+            throw new errorHandler_1.AppError(404, 'Incident not found');
+        const data = await (0, incidentCompletion_1.getCompletionAct)(req.params.id);
+        res.json({ data });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+exports.incidentsRouter.post('/:id/completion/request', (0, auth_1.authorize)('admin', 'manager', 'technician'), async (req, res, next) => {
+    try {
+        const data = await (0, incidentCompletion_1.requestCompletionSignature)(req.params.id, req.user.userId);
+        res.json({ data });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+exports.incidentsRouter.post('/:id/completion/sign', (0, auth_1.authorize)('admin', 'manager', 'technician'), async (req, res, next) => {
+    try {
+        const body = zod_1.z
+            .object({
+            signer_name: zod_1.z.string().min(1).max(255),
+            signature_type: zod_1.z.enum(['typed', 'drawn']),
+            signature_data: zod_1.z.string().min(1),
+        })
+            .parse(req.body);
+        const data = await (0, incidentCompletion_1.signCompletionAct)({
+            incidentId: req.params.id,
+            signerName: body.signer_name,
+            signatureType: body.signature_type,
+            signatureData: body.signature_data,
+            staffUserId: req.user.userId,
+        });
+        res.json({ data });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+exports.incidentsRouter.post('/:id/completion/generate-act', (0, auth_1.authorize)('admin', 'manager', 'technician'), async (req, res, next) => {
+    try {
+        const data = await (0, incidentCompletion_1.generateCompletionActPdf)(req.params.id, req.user.userId);
+        res.json({ data });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+exports.incidentsRouter.get('/:id/completion/act.pdf', async (req, res, next) => {
+    try {
+        const existing = await (0, pool_1.queryOne)('SELECT id FROM incidents WHERE id = ?', [req.params.id]);
+        if (!existing)
+            throw new errorHandler_1.AppError(404, 'Incident not found');
+        const { path: pdfPath, filename } = await (0, incidentCompletion_1.getCompletionActPdfPath)(req.params.id);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        fs_1.default.createReadStream(pdfPath).pipe(res);
     }
     catch (err) {
         next(err);

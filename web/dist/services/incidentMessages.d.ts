@@ -10,6 +10,7 @@ export type IncidentMessage = {
 };
 export declare function getLastReadAt(incidentId: string, readerType: 'staff' | 'portal', readerId: string): Promise<string | null>;
 export declare function getPortalReadWatermark(incidentId: string, portalUserId: string): Promise<string>;
+export declare function getStaffReadWatermark(incidentId: string, staffUserId: string): Promise<string>;
 export declare function listIncidentMessagesWithReadState(incidentId: string, readerType: 'staff' | 'portal', readerId: string): Promise<IncidentMessage[]>;
 export declare function assertIncidentExists(incidentId: string): Promise<void>;
 export declare function listIncidentMessages(incidentId: string): Promise<IncidentMessage[]>;

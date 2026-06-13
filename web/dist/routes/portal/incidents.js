@@ -16,6 +16,7 @@ const pushNotifications_1 = require("../../services/pushNotifications");
 const incidentStatuses_1 = require("../../services/incidentStatuses");
 const unitStatusSync_1 = require("../../services/unitStatusSync");
 const incidentActivity_1 = require("../../services/incidentActivity");
+const incidentCompletion_1 = require("../../services/incidentCompletion");
 exports.portalIncidentsRouter = (0, express_1.Router)();
 const createSchema = zod_1.z.object({
     client_id: zod_1.z.string().uuid(),
@@ -220,6 +221,41 @@ exports.portalIncidentsRouter.post('/:id/messages', async (req, res, next) => {
             }));
         }
         res.status(201).json({ data: message });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+exports.portalIncidentsRouter.get('/:id/completion', async (req, res, next) => {
+    try {
+        const { access } = req.portalUser;
+        await (0, portalScope_1.assertCanViewIncident)(access, req.params.id);
+        const data = await (0, incidentCompletion_1.getCompletionAct)(req.params.id);
+        res.json({ data });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+exports.portalIncidentsRouter.post('/:id/completion/sign', async (req, res, next) => {
+    try {
+        const { portalUserId, access } = req.portalUser;
+        await (0, portalScope_1.assertCanViewIncident)(access, req.params.id);
+        const body = zod_1.z
+            .object({
+            signer_name: zod_1.z.string().min(1).max(255),
+            signature_type: zod_1.z.enum(['typed', 'drawn']),
+            signature_data: zod_1.z.string().min(1),
+        })
+            .parse(req.body);
+        const data = await (0, incidentCompletion_1.signCompletionAct)({
+            incidentId: req.params.id,
+            signerName: body.signer_name,
+            signatureType: body.signature_type,
+            signatureData: body.signature_data,
+            portalUserId,
+        });
+        res.json({ data });
     }
     catch (err) {
         next(err);

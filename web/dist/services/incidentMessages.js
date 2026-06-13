@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getLastReadAt = getLastReadAt;
 exports.getPortalReadWatermark = getPortalReadWatermark;
+exports.getStaffReadWatermark = getStaffReadWatermark;
 exports.listIncidentMessagesWithReadState = listIncidentMessagesWithReadState;
 exports.assertIncidentExists = assertIncidentExists;
 exports.listIncidentMessages = listIncidentMessages;
@@ -35,11 +36,26 @@ async function getPortalReadWatermark(incidentId, portalUserId) {
     ) AS watermark`, [incidentId, portalUserId, incidentId, portalUserId]);
     return row?.watermark ?? '1970-01-01 00:00:00';
 }
+async function getStaffReadWatermark(incidentId, staffUserId) {
+    const row = await (0, pool_1.queryOne)(`SELECT GREATEST(
+      COALESCE(
+        (SELECT last_read_at FROM incident_message_reads
+         WHERE incident_id = ? AND reader_type = 'staff' AND reader_id = ?),
+        '1970-01-01 00:00:00'
+      ),
+      COALESCE(
+        (SELECT MAX(created_at) FROM incident_messages
+         WHERE incident_id = ? AND author_type = 'staff' AND author_staff_id = ?),
+        '1970-01-01 00:00:00'
+      )
+    ) AS watermark`, [incidentId, staffUserId, incidentId, staffUserId]);
+    return row?.watermark ?? '1970-01-01 00:00:00';
+}
 async function listIncidentMessagesWithReadState(incidentId, readerType, readerId) {
     const messages = await listIncidentMessages(incidentId);
     const cutoff = readerType === 'portal'
         ? await getPortalReadWatermark(incidentId, readerId)
-        : (await getLastReadAt(incidentId, readerType, readerId)) ?? '1970-01-01 00:00:00';
+        : await getStaffReadWatermark(incidentId, readerId);
     const unreadFrom = readerType === 'portal' ? 'staff' : 'portal';
     return messages.map((m) => ({
         ...m,
@@ -66,6 +82,7 @@ async function addStaffMessage(incidentId, staffUserId, body) {
     await (0, pool_1.query)(`INSERT INTO incident_messages (id, incident_id, author_type, author_staff_id, author_name, body)
      VALUES (?, ?, 'staff', ?, ?, ?)`, [id, incidentId, staffUserId, user.full_name, body.trim()]);
     const message = await (0, pool_1.queryOne)('SELECT id, incident_id, author_type, author_name, body, created_at FROM incident_messages WHERE id = ?', [id]);
+    await markIncidentRead(incidentId, 'staff', staffUserId);
     return message;
 }
 async function addPortalMessage(incidentId, portalUserId, grants, body) {
@@ -97,14 +114,11 @@ async function countUnreadForPortal(incidentId, portalUserId) {
     return row?.total ?? 0;
 }
 async function countUnreadForStaff(incidentId, staffUserId) {
+    const watermark = await getStaffReadWatermark(incidentId, staffUserId);
     const row = await (0, pool_1.queryOne)(`SELECT COUNT(*) AS total FROM incident_messages m
      WHERE m.incident_id = ?
        AND m.author_type = 'portal'
-       AND m.created_at > COALESCE(
-         (SELECT r.last_read_at FROM incident_message_reads r
-          WHERE r.incident_id = m.incident_id AND r.reader_type = 'staff' AND r.reader_id = ?),
-         '1970-01-01 00:00:00'
-       )`, [incidentId, staffUserId]);
+       AND m.created_at > ?`, [incidentId, watermark]);
     return row?.total ?? 0;
 }
 //# sourceMappingURL=incidentMessages.js.map
