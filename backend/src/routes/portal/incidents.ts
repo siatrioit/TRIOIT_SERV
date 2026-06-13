@@ -20,6 +20,8 @@ import { assertUnitForIncident } from '../../services/units';
 import { resolveIncidentAssignee } from '../../services/incidentAssignment';
 import { resolveAssetComponentId } from '../../services/assetTypes';
 import { firePush, notifyNewIncident, notifyPortalChatMessage } from '../../services/pushNotifications';
+import { getDefaultIncidentStatusCode, sqlInActiveStatusCodes } from '../../services/incidentStatuses';
+import { syncUnitStatusFromIncident } from '../../services/unitStatusSync';
 
 export const portalIncidentsRouter = Router();
 
@@ -86,9 +88,13 @@ portalIncidentsRouter.get('/', async (req, res, next) => {
     }
 
     if (status === 'open') {
-      where += " AND i.status IN ('pending', 'in_progress', 'paused')";
+      const open = await sqlInActiveStatusCodes('open');
+      where += ` AND i.status IN (${open.fragment})`;
+      queryParams.push(...open.codes);
     } else if (status === 'closed') {
-      where += " AND i.status IN ('completed', 'cancelled')";
+      const closed = await sqlInActiveStatusCodes('closed');
+      where += ` AND i.status IN (${closed.fragment})`;
+      queryParams.push(...closed.codes);
     } else if (status) {
       where += ' AND i.status = ?';
       queryParams.push(status);
@@ -179,6 +185,7 @@ portalIncidentsRouter.post('/', async (req, res, next) => {
     const id = uuidv4();
     const incidentNumber = generateIncidentNumber();
     const assignedTo = await resolveIncidentAssignee(body.object_id);
+    const defaultStatus = await getDefaultIncidentStatusCode();
 
     let assetComponentId: string | null = null;
     if (body.asset_component_id) {
@@ -199,7 +206,7 @@ portalIncidentsRouter.post('/', async (req, res, next) => {
       `INSERT INTO incidents (
         id, incident_number, client_id, object_id, unit_id, asset_component_id, reported_by, reported_via,
         title, description, status, priority, assigned_to
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'portal', ?, ?, 'pending', ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'portal', ?, ?, ?, ?, ?)`,
       [
         id,
         incidentNumber,
@@ -210,10 +217,24 @@ portalIncidentsRouter.post('/', async (req, res, next) => {
         reporter?.full_name ?? 'Klienta portāls',
         body.title,
         body.description ?? null,
+        defaultStatus,
         body.priority,
         assignedTo,
       ]
     );
+
+    if (body.unit_id) {
+      await syncUnitStatusFromIncident(
+        {
+          unitId: body.unit_id,
+          clientId: body.client_id,
+          objectId: body.object_id,
+          incidentId: id,
+          incidentStatus: defaultStatus,
+        },
+        null
+      );
+    }
 
     const incident = await queryOne<PortalIncidentRow>(
       `SELECT i.id, i.incident_number, i.client_id, i.object_id, i.title, i.description,

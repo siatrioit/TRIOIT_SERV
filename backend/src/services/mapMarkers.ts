@@ -1,4 +1,5 @@
 import { query } from '../db/pool';
+import { sqlInActiveStatusCodes } from './incidentStatuses';
 import {
   formatResolvedAddress,
   geocodeLocation,
@@ -47,8 +48,6 @@ type MapObjectRow = {
   client_latitude: number | string | null;
   client_longitude: number | string | null;
 };
-
-const OPEN_STATUSES = ['pending', 'in_progress', 'paused'] as const;
 
 function parseCoord(value: number | string | null | undefined): number | null {
   if (value == null || value === '') return null;
@@ -113,16 +112,17 @@ export async function listMapMarkers(): Promise<MapMarker[]> {
 
   if (rows.length === 0) return [];
 
+  const open = await sqlInActiveStatusCodes('open');
   const placeholders = rows.map(() => '?').join(', ');
   const openIncidents = await query<MapOpenIncident & { object_id: string }>(
     `SELECT i.object_id, i.id, i.incident_number, i.title, i.priority, i.status
      FROM incidents i
      WHERE i.object_id IN (${placeholders})
-       AND i.status IN ('pending', 'in_progress', 'paused')
+       AND i.status IN (${open.fragment})
      ORDER BY
        FIELD(i.priority, 'critical', 'high', 'medium', 'low'),
        i.received_at DESC`,
-    rows.map((r) => r.object_id)
+    [...rows.map((r) => r.object_id), ...open.codes]
   );
 
   const incidentsByObject = new Map<string, MapOpenIncident[]>();
@@ -186,5 +186,3 @@ export async function listMapMarkers(): Promise<MapMarker[]> {
 
   return markers;
 }
-
-export { OPEN_STATUSES };

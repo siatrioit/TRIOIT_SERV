@@ -30,6 +30,10 @@ import { mapRouter } from './routes/map';
 import { portalUsersRouter } from './routes/portalUsers';
 import { pushRouter } from './routes/push';
 import { assetTypesRouter, setupAssetTypesRouter } from './routes/assetTypes';
+import {
+  incidentStatusesRouter,
+  setupIncidentStatusesRouter,
+} from './routes/incidentStatuses';
 import { runMigrations } from './db/migrate';
 import { APP_VERSION } from './version';
 
@@ -106,6 +110,8 @@ app.use(`${API_PREFIX}/invoices`, invoicesRouter);
 app.use(`${API_PREFIX}/ai`, aiRouter);
 app.use(`${API_PREFIX}/asset-types`, assetTypesRouter);
 app.use(`${API_PREFIX}/setup/asset-types`, setupAssetTypesRouter);
+app.use(`${API_PREFIX}/incident-statuses`, incidentStatusesRouter);
+app.use(`${API_PREFIX}/setup/incident-statuses`, setupIncidentStatusesRouter);
 
 // cPanel: statiskais frontend no public/ mapes (viena Node.js aplikācija uz serv.trioit.lv)
 const staticDir = process.env.STATIC_DIR;

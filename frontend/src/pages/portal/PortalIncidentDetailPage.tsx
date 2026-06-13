@@ -7,6 +7,7 @@ import { usePortalAuthStore } from '../../store/portalAuthStore';
 import { IncidentMessageThread } from '../../components/incidents/IncidentMessageThread';
 import { PriorityBadge } from '../../components/incidents/PriorityBadge';
 import { StatusBadge } from '../../components/incidents/StatusBadge';
+import { useIncidentStatuses } from '../../hooks/useIncidentStatuses';
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString('lv-LV', {
@@ -19,6 +20,7 @@ export function PortalIncidentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const access = usePortalAuthStore((s) => s.access);
   const canPost = portalUserCanWrite(access);
+  const { isClosed } = useIncidentStatuses();
   const { data, isLoading } = useQuery({
     queryKey: ['portal-incident', id],
     queryFn: () => portalIncidentsApi.get(id!),
@@ -100,9 +102,7 @@ export function PortalIncidentDetailPage() {
           incidentId={id}
           variant="portal"
           canPost={canPost}
-          incidentClosed={
-            incident.status === 'completed' || incident.status === 'cancelled'
-          }
+          incidentClosed={isClosed(incident.status)}
         />
       )}
     </div>

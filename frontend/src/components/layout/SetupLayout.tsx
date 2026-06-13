@@ -4,6 +4,7 @@ import { useAuthStore } from '../../store/authStore';
 const sections = [
   { to: '/setup/users', label: 'Lietotāji', roles: ['admin', 'manager'] as const },
   { to: '/setup/asset-types', label: 'Aktīvu tipi', roles: ['admin'] as const },
+  { to: '/setup/incident-statuses', label: 'Atgadījumu statusi', roles: ['admin'] as const },
 ];
 
 export function SetupLayout() {

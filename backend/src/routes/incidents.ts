@@ -15,9 +15,25 @@ import {
   notifyNewIncident,
 } from '../services/pushNotifications';
 import { resolveAssetComponentId } from '../services/assetTypes';
+import {
+  assertValidIncidentStatus,
+  getDefaultIncidentStatusCode,
+  sqlInActiveStatusCodes,
+} from '../services/incidentStatuses';
+import { resolveStaffActorName } from '../services/unitActivity';
+import { syncUnitStatusFromIncident } from '../services/unitStatusSync';
 
 export const incidentsRouter = Router();
 incidentsRouter.use(authenticate);
+
+async function actorFromReq(req: Express.Request) {
+  const user = (req as Express.Request & { user?: { userId: string } }).user;
+  if (!user) return null;
+  return {
+    userId: user.userId,
+    userName: await resolveStaffActorName(user.userId),
+  };
+}
 
 const incidentSchema = z.object({
   client_id: z.string().uuid(),
@@ -28,7 +44,7 @@ const incidentSchema = z.object({
   reported_via: z.string().optional(),
   title: z.string().min(1).max(255),
   description: z.string().optional(),
-  status: z.enum(['pending', 'in_progress', 'paused', 'completed', 'cancelled']).default('pending'),
+  status: z.string().optional(),
   priority: z.enum(['low', 'medium', 'high', 'critical']).default('medium'),
   due_at: z.string().optional(),
   resolution: z.string().optional(),
@@ -55,6 +71,7 @@ incidentsRouter.get('/', async (req, res, next) => {
     const priority = req.query.priority as string | undefined;
     const city = req.query.city as string | undefined;
     const assignedTo = req.query.assigned_to as string | undefined;
+    const unitId = req.query.unit_id as string | undefined;
 
     let where = 'WHERE 1=1';
     const params: unknown[] = [];
@@ -63,10 +80,18 @@ incidentsRouter.get('/', async (req, res, next) => {
       where += ' AND c.city = ?';
       params.push(city);
     }
+    if (unitId) {
+      where += ' AND i.unit_id = ?';
+      params.push(unitId);
+    }
     if (status === 'open') {
-      where += " AND i.status IN ('pending', 'in_progress', 'paused')";
+      const open = await sqlInActiveStatusCodes('open');
+      where += ` AND i.status IN (${open.fragment})`;
+      params.push(...open.codes);
     } else if (status === 'closed') {
-      where += " AND i.status IN ('completed', 'cancelled')";
+      const closed = await sqlInActiveStatusCodes('closed');
+      where += ` AND i.status IN (${closed.fragment})`;
+      params.push(...closed.codes);
     } else if (status) {
       where += ' AND i.status = ?';
       params.push(status);
@@ -171,6 +196,8 @@ incidentsRouter.get('/:id', async (req, res, next) => {
 incidentsRouter.post('/', authorize('admin', 'manager', 'technician'), async (req, res, next) => {
   try {
     const body = incidentSchema.parse(req.body);
+    const statusCode = body.status ?? (await getDefaultIncidentStatusCode());
+    await assertValidIncidentStatus(statusCode);
     const location = await resolveIncidentLocation(body);
     const assignedTo = await resolveIncidentAssignee(location.object_id, body.assigned_to);
 
@@ -201,7 +228,7 @@ incidentsRouter.post('/', authorize('admin', 'manager', 'technician'), async (re
         assetComponentId,
         body.contract_id ?? null,
         body.reported_by ?? null, body.reported_via || 'web', body.title, body.description ?? null,
-        body.status, body.priority, body.due_at ?? null, assignedTo,
+        statusCode, body.priority, body.due_at ?? null, assignedTo,
         body.latitude ?? null, body.longitude ?? null, body.voice_transcript ?? null,
         body.ai_confidence ?? null, body.ai_metadata ? JSON.stringify(body.ai_metadata) : null,
         req.user?.userId ?? null,
@@ -217,6 +244,19 @@ incidentsRouter.post('/', authorize('admin', 'manager', 'technician'), async (re
        WHERE i.id = ?`,
       [id]
     );
+
+    if (location.unit_id && location.object_id) {
+      await syncUnitStatusFromIncident(
+        {
+          unitId: location.unit_id,
+          clientId: location.client_id,
+          objectId: location.object_id,
+          incidentId: id,
+          incidentStatus: statusCode,
+        },
+        await actorFromReq(req)
+      );
+    }
 
     firePush(() =>
       notifyNewIncident({
@@ -365,10 +405,22 @@ incidentsRouter.patch('/:id', authorize('admin', 'manager', 'technician'), async
 
 incidentsRouter.patch('/:id/status', authorize('admin', 'manager', 'technician'), async (req, res, next) => {
   try {
-    const { status, resolution } = z.object({
-      status: z.enum(['pending', 'in_progress', 'paused', 'completed', 'cancelled']),
-      resolution: z.string().optional(),
-    }).parse(req.body);
+    const { status, resolution } = z
+      .object({
+        status: z.string(),
+        resolution: z.string().optional(),
+      })
+      .parse(req.body);
+
+    await assertValidIncidentStatus(status);
+
+    const existing = await queryOne<{
+      id: string;
+      unit_id: string | null;
+      client_id: string;
+      object_id: string | null;
+    }>('SELECT id, unit_id, client_id, object_id FROM incidents WHERE id = ?', [req.params.id]);
+    if (!existing) throw new AppError(404, 'Incident not found');
 
     const completedAt = status === 'completed' ? new Date().toISOString() : null;
 
@@ -376,6 +428,19 @@ incidentsRouter.patch('/:id/status', authorize('admin', 'manager', 'technician')
       'UPDATE incidents SET status = ?, resolution = ?, completed_at = ? WHERE id = ?',
       [status, resolution, completedAt, req.params.id]
     );
+
+    if (existing.unit_id && existing.object_id) {
+      await syncUnitStatusFromIncident(
+        {
+          unitId: existing.unit_id,
+          clientId: existing.client_id,
+          objectId: existing.object_id,
+          incidentId: existing.id,
+          incidentStatus: status,
+        },
+        await actorFromReq(req)
+      );
+    }
 
     const incident = await queryOne<Incident>('SELECT * FROM incidents WHERE id = ?', [req.params.id]);
     res.json({ data: incident });

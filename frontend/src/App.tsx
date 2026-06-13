@@ -21,6 +21,7 @@ import { CustomerAssetsPage } from './pages/CustomerAssetsPage';
 import { UsersPage } from './pages/UsersPage';
 import { SetupLayout } from './components/layout/SetupLayout';
 import { AssetTypesSetupPage } from './pages/setup/AssetTypesSetupPage';
+import { IncidentStatusesSetupPage } from './pages/setup/IncidentStatusesSetupPage';
 import { PortalLoginPage } from './pages/portal/PortalLoginPage';
 import { PortalIncidentsPage } from './pages/portal/PortalIncidentsPage';
 import { PortalNewIncidentPage } from './pages/portal/PortalNewIncidentPage';
@@ -86,6 +87,7 @@ export default function App() {
           <Route index element={<Navigate to="/setup/users" replace />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="asset-types" element={<AssetTypesSetupPage />} />
+          <Route path="incident-statuses" element={<IncidentStatusesSetupPage />} />
         </Route>
         <Route path="users" element={<Navigate to="/setup/users" replace />} />
       </Route>

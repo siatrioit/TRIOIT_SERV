@@ -1,12 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '../../api/client';
 import { incidentsApi } from '../../api/incidents';
-import {
-  ALL_INCIDENT_STATUSES,
-  INCIDENT_STATUS_LABELS,
-  isClosedIncidentStatus,
-} from '../../utils/incidentStatus';
+import { useIncidentStatuses } from '../../hooks/useIncidentStatuses';
 
 type IncidentStatusSectionProps = {
   incidentId: string;
@@ -20,6 +16,7 @@ export function IncidentStatusSection({
   canEdit,
 }: IncidentStatusSectionProps) {
   const queryClient = useQueryClient();
+  const { statuses, label, isClosed } = useIncidentStatuses();
   const [selectedStatus, setSelectedStatus] = useState(status);
   const [resolution, setResolution] = useState('');
   const [error, setError] = useState('');
@@ -33,11 +30,14 @@ export function IncidentStatusSection({
       incidentsApi.updateStatus(
         incidentId,
         selectedStatus,
-        isClosedIncidentStatus(selectedStatus) ? resolution.trim() || undefined : undefined
+        isClosed(selectedStatus) ? resolution.trim() || undefined : undefined
       ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['incident', incidentId] });
       queryClient.invalidateQueries({ queryKey: ['incidents'] });
+      queryClient.invalidateQueries({ queryKey: ['unit-incidents'] });
+      queryClient.invalidateQueries({ queryKey: ['customer-assets'] });
+      queryClient.invalidateQueries({ queryKey: ['unit-activity'] });
       setError('');
     },
     onError: (err) => {
@@ -53,7 +53,7 @@ export function IncidentStatusSection({
 
   const handleSave = () => {
     if (selectedStatus === status && !resolution.trim()) return;
-    if (isClosedIncidentStatus(selectedStatus) && !resolution.trim()) {
+    if (isClosed(selectedStatus) && !resolution.trim()) {
       setError('Noslēdzot atgadījumu, norādiet risinājumu');
       return;
     }
@@ -64,9 +64,7 @@ export function IncidentStatusSection({
     <div className="card space-y-3">
       <div>
         <h3 className="font-medium text-gray-800">Statuss</h3>
-        <p className="text-sm text-gray-500 mt-0.5">
-          {INCIDENT_STATUS_LABELS[status] || status}
-        </p>
+        <p className="text-sm text-gray-500 mt-0.5">{label(status)}</p>
       </div>
 
       {canEdit && (
@@ -77,14 +75,14 @@ export function IncidentStatusSection({
             onChange={(e) => setSelectedStatus(e.target.value)}
             disabled={statusMutation.isPending}
           >
-            {ALL_INCIDENT_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {INCIDENT_STATUS_LABELS[s]}
+            {statuses.map((s) => (
+              <option key={s.code} value={s.code}>
+                {s.label}
               </option>
             ))}
           </select>
 
-          {isClosedIncidentStatus(selectedStatus) && (
+          {isClosed(selectedStatus) && (
             <textarea
               className="input-field min-h-[72px]"
               placeholder="Risinājums / apraksts (obligāts noslēdzot)"
@@ -100,7 +98,7 @@ export function IncidentStatusSection({
             onClick={handleSave}
             disabled={
               statusMutation.isPending ||
-              (selectedStatus === status && !isClosedIncidentStatus(selectedStatus))
+              (selectedStatus === status && !isClosed(selectedStatus))
             }
           >
             {statusMutation.isPending ? 'Saglabā...' : 'Mainīt statusu'}

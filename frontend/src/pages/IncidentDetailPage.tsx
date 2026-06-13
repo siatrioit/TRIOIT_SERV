@@ -10,11 +10,13 @@ import { PriorityBadge } from '../components/incidents/PriorityBadge';
 import { StatusBadge } from '../components/incidents/StatusBadge';
 import { formatIncidentUnit } from '../utils/incidentUnit';
 import { useAuthStore } from '../store/authStore';
+import { useIncidentStatuses } from '../hooks/useIncidentStatuses';
 
 export function IncidentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const role = useAuthStore((s) => s.user?.role);
   const canPost = role === 'admin' || role === 'manager' || role === 'technician';
+  const { isClosed } = useIncidentStatuses();
 
   const { data, isLoading } = useQuery({
     queryKey: ['incident', id],
@@ -26,7 +28,7 @@ export function IncidentDetailPage() {
   const incident = data?.data;
   if (!incident) return <div>Atgadījums nav atrasts</div>;
 
-  const isClosed = incident.status === 'completed' || incident.status === 'cancelled';
+  const isClosedStatus = isClosed(incident.status);
 
   return (
     <div className="space-y-4 pb-8">
@@ -91,14 +93,14 @@ export function IncidentDetailPage() {
           <IncidentWorkLogSection
             incidentId={id}
             canEdit={canPost}
-            incidentClosed={isClosed}
+            incidentClosed={isClosedStatus}
           />
           <IncidentMaterialsSection incidentId={id} />
           <IncidentMessageThread
             incidentId={id}
             variant="staff"
             canPost={canPost}
-            incidentClosed={isClosed}
+            incidentClosed={isClosedStatus}
           />
         </>
       )}

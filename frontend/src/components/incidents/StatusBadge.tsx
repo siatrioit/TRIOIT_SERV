@@ -1,17 +1,25 @@
-import { INCIDENT_STATUS_LABELS } from '../../utils/incidentStatus';
-
-const colors: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800',
-  in_progress: 'bg-blue-100 text-blue-800',
-  paused: 'bg-gray-100 text-gray-700',
-  completed: 'bg-green-100 text-green-800',
-  cancelled: 'bg-red-100 text-red-700',
-};
-
-export function StatusBadge({ status }: { status: string }) {
-  return (
-    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colors[status] || colors.pending}`}>
-      {INCIDENT_STATUS_LABELS[status] || status}
-    </span>
-  );
-}
+import { useIncidentStatuses } from '../../hooks/useIncidentStatuses';
+import { STATUS_BADGE_COLORS } from '../../utils/incidentStatus';
+
+const CODE_COLORS: Record<string, string> = {
+  pending: STATUS_BADGE_COLORS.yellow,
+  in_progress: STATUS_BADGE_COLORS.blue,
+  paused: STATUS_BADGE_COLORS.gray,
+  completed: STATUS_BADGE_COLORS.green,
+  cancelled: STATUS_BADGE_COLORS.red,
+};
+
+export function StatusBadge({ status }: { status: string }) {
+  const { label, statuses } = useIncidentStatuses();
+  const config = statuses.find((s) => s.code === status);
+  const className =
+    (config?.badge_tone && STATUS_BADGE_COLORS[config.badge_tone]) ||
+    CODE_COLORS[status] ||
+    STATUS_BADGE_COLORS.gray;
+
+  return (
+    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${className}`}>
+      {label(status)}
+    </span>
+  );
+}
