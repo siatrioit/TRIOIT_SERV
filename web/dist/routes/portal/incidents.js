@@ -13,6 +13,8 @@ const units_1 = require("../../services/units");
 const incidentAssignment_1 = require("../../services/incidentAssignment");
 const assetTypes_1 = require("../../services/assetTypes");
 const pushNotifications_1 = require("../../services/pushNotifications");
+const incidentStatuses_1 = require("../../services/incidentStatuses");
+const unitStatusSync_1 = require("../../services/unitStatusSync");
 exports.portalIncidentsRouter = (0, express_1.Router)();
 const createSchema = zod_1.z.object({
     client_id: zod_1.z.string().uuid(),
@@ -48,10 +50,14 @@ exports.portalIncidentsRouter.get('/', async (req, res, next) => {
             queryParams.push(objectId);
         }
         if (status === 'open') {
-            where += " AND i.status IN ('pending', 'in_progress', 'paused')";
+            const open = await (0, incidentStatuses_1.sqlInActiveStatusCodes)('open');
+            where += ` AND i.status IN (${open.fragment})`;
+            queryParams.push(...open.codes);
         }
         else if (status === 'closed') {
-            where += " AND i.status IN ('completed', 'cancelled')";
+            const closed = await (0, incidentStatuses_1.sqlInActiveStatusCodes)('closed');
+            where += ` AND i.status IN (${closed.fragment})`;
+            queryParams.push(...closed.codes);
         }
         else if (status) {
             where += ' AND i.status = ?';
@@ -120,6 +126,7 @@ exports.portalIncidentsRouter.post('/', async (req, res, next) => {
         const id = (0, uuid_1.v4)();
         const incidentNumber = generateIncidentNumber();
         const assignedTo = await (0, incidentAssignment_1.resolveIncidentAssignee)(body.object_id);
+        const defaultStatus = await (0, incidentStatuses_1.getDefaultIncidentStatusCode)();
         let assetComponentId = null;
         if (body.asset_component_id) {
             if (!body.unit_id) {
@@ -134,7 +141,7 @@ exports.portalIncidentsRouter.post('/', async (req, res, next) => {
         await (0, pool_1.query)(`INSERT INTO incidents (
         id, incident_number, client_id, object_id, unit_id, asset_component_id, reported_by, reported_via,
         title, description, status, priority, assigned_to
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'portal', ?, ?, 'pending', ?, ?)`, [
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'portal', ?, ?, ?, ?, ?)`, [
             id,
             incidentNumber,
             body.client_id,
@@ -144,9 +151,19 @@ exports.portalIncidentsRouter.post('/', async (req, res, next) => {
             reporter?.full_name ?? 'Klienta portāls',
             body.title,
             body.description ?? null,
+            defaultStatus,
             body.priority,
             assignedTo,
         ]);
+        if (body.unit_id) {
+            await (0, unitStatusSync_1.syncUnitStatusFromIncident)({
+                unitId: body.unit_id,
+                clientId: body.client_id,
+                objectId: body.object_id,
+                incidentId: id,
+                incidentStatus: defaultStatus,
+            }, null);
+        }
         const incident = await (0, pool_1.queryOne)(`SELECT i.id, i.incident_number, i.client_id, i.object_id, i.title, i.description,
               i.status, i.priority, i.received_at, i.completed_at, i.resolution,
               c.name AS client_name, co.name AS object_name,

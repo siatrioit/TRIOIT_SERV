@@ -1,12 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.OPEN_STATUSES = void 0;
 exports.saveMapMarkerCoords = saveMapMarkerCoords;
 exports.listMapMarkers = listMapMarkers;
 const pool_1 = require("../db/pool");
+const incidentStatuses_1 = require("./incidentStatuses");
 const geocode_1 = require("./geocode");
-const OPEN_STATUSES = ['pending', 'in_progress', 'paused'];
-exports.OPEN_STATUSES = OPEN_STATUSES;
 function parseCoord(value) {
     if (value == null || value === '')
         return null;
@@ -50,14 +48,15 @@ async function listMapMarkers() {
      ORDER BY co.name ASC`);
     if (rows.length === 0)
         return [];
+    const open = await (0, incidentStatuses_1.sqlInActiveStatusCodes)('open');
     const placeholders = rows.map(() => '?').join(', ');
     const openIncidents = await (0, pool_1.query)(`SELECT i.object_id, i.id, i.incident_number, i.title, i.priority, i.status
      FROM incidents i
      WHERE i.object_id IN (${placeholders})
-       AND i.status IN ('pending', 'in_progress', 'paused')
+       AND i.status IN (${open.fragment})
      ORDER BY
        FIELD(i.priority, 'critical', 'high', 'medium', 'low'),
-       i.received_at DESC`, rows.map((r) => r.object_id));
+       i.received_at DESC`, [...rows.map((r) => r.object_id), ...open.codes]);
     const incidentsByObject = new Map();
     for (const inc of openIncidents) {
         const list = incidentsByObject.get(inc.object_id) ?? [];

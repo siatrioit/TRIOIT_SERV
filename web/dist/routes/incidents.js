@@ -13,8 +13,20 @@ const incidentAssignment_1 = require("../services/incidentAssignment");
 const incidentMessages_1 = require("../services/incidentMessages");
 const pushNotifications_1 = require("../services/pushNotifications");
 const assetTypes_1 = require("../services/assetTypes");
+const incidentStatuses_1 = require("../services/incidentStatuses");
+const unitActivity_1 = require("../services/unitActivity");
+const unitStatusSync_1 = require("../services/unitStatusSync");
 exports.incidentsRouter = (0, express_1.Router)();
 exports.incidentsRouter.use(auth_1.authenticate);
+async function actorFromReq(req) {
+    const user = req.user;
+    if (!user)
+        return null;
+    return {
+        userId: user.userId,
+        userName: await (0, unitActivity_1.resolveStaffActorName)(user.userId),
+    };
+}
 const incidentSchema = zod_1.z.object({
     client_id: zod_1.z.string().uuid(),
     object_id: zod_1.z.string().uuid().optional(),
@@ -24,7 +36,7 @@ const incidentSchema = zod_1.z.object({
     reported_via: zod_1.z.string().optional(),
     title: zod_1.z.string().min(1).max(255),
     description: zod_1.z.string().optional(),
-    status: zod_1.z.enum(['pending', 'in_progress', 'paused', 'completed', 'cancelled']).default('pending'),
+    status: zod_1.z.string().optional(),
     priority: zod_1.z.enum(['low', 'medium', 'high', 'critical']).default('medium'),
     due_at: zod_1.z.string().optional(),
     resolution: zod_1.z.string().optional(),
@@ -49,17 +61,26 @@ exports.incidentsRouter.get('/', async (req, res, next) => {
         const priority = req.query.priority;
         const city = req.query.city;
         const assignedTo = req.query.assigned_to;
+        const unitId = req.query.unit_id;
         let where = 'WHERE 1=1';
         const params = [];
         if (city) {
             where += ' AND c.city = ?';
             params.push(city);
         }
+        if (unitId) {
+            where += ' AND i.unit_id = ?';
+            params.push(unitId);
+        }
         if (status === 'open') {
-            where += " AND i.status IN ('pending', 'in_progress', 'paused')";
+            const open = await (0, incidentStatuses_1.sqlInActiveStatusCodes)('open');
+            where += ` AND i.status IN (${open.fragment})`;
+            params.push(...open.codes);
         }
         else if (status === 'closed') {
-            where += " AND i.status IN ('completed', 'cancelled')";
+            const closed = await (0, incidentStatuses_1.sqlInActiveStatusCodes)('closed');
+            where += ` AND i.status IN (${closed.fragment})`;
+            params.push(...closed.codes);
         }
         else if (status) {
             where += ' AND i.status = ?';
@@ -134,6 +155,8 @@ exports.incidentsRouter.get('/:id', async (req, res, next) => {
 exports.incidentsRouter.post('/', (0, auth_1.authorize)('admin', 'manager', 'technician'), async (req, res, next) => {
     try {
         const body = incidentSchema.parse(req.body);
+        const statusCode = body.status ?? (await (0, incidentStatuses_1.getDefaultIncidentStatusCode)());
+        await (0, incidentStatuses_1.assertValidIncidentStatus)(statusCode);
         const location = await (0, incidentLocation_1.resolveIncidentLocation)(body);
         const assignedTo = await (0, incidentAssignment_1.resolveIncidentAssignee)(location.object_id, body.assigned_to);
         let assetComponentId = null;
@@ -156,7 +179,7 @@ exports.incidentsRouter.post('/', (0, auth_1.authorize)('admin', 'manager', 'tec
             assetComponentId,
             body.contract_id ?? null,
             body.reported_by ?? null, body.reported_via || 'web', body.title, body.description ?? null,
-            body.status, body.priority, body.due_at ?? null, assignedTo,
+            statusCode, body.priority, body.due_at ?? null, assignedTo,
             body.latitude ?? null, body.longitude ?? null, body.voice_transcript ?? null,
             body.ai_confidence ?? null, body.ai_metadata ? JSON.stringify(body.ai_metadata) : null,
             req.user?.userId ?? null,
@@ -165,6 +188,15 @@ exports.incidentsRouter.post('/', (0, auth_1.authorize)('admin', 'manager', 'tec
        FROM incidents i
        LEFT JOIN client_objects co ON co.id = i.object_id
        WHERE i.id = ?`, [id]);
+        if (location.unit_id && location.object_id) {
+            await (0, unitStatusSync_1.syncUnitStatusFromIncident)({
+                unitId: location.unit_id,
+                clientId: location.client_id,
+                objectId: location.object_id,
+                incidentId: id,
+                incidentStatus: statusCode,
+            }, await actorFromReq(req));
+        }
         (0, pushNotifications_1.firePush)(() => (0, pushNotifications_1.notifyNewIncident)({
             incidentId: id,
             incidentNumber,
@@ -262,12 +294,27 @@ exports.incidentsRouter.patch('/:id', (0, auth_1.authorize)('admin', 'manager', 
 });
 exports.incidentsRouter.patch('/:id/status', (0, auth_1.authorize)('admin', 'manager', 'technician'), async (req, res, next) => {
     try {
-        const { status, resolution } = zod_1.z.object({
-            status: zod_1.z.enum(['pending', 'in_progress', 'paused', 'completed', 'cancelled']),
+        const { status, resolution } = zod_1.z
+            .object({
+            status: zod_1.z.string(),
             resolution: zod_1.z.string().optional(),
-        }).parse(req.body);
+        })
+            .parse(req.body);
+        await (0, incidentStatuses_1.assertValidIncidentStatus)(status);
+        const existing = await (0, pool_1.queryOne)('SELECT id, unit_id, client_id, object_id FROM incidents WHERE id = ?', [req.params.id]);
+        if (!existing)
+            throw new errorHandler_1.AppError(404, 'Incident not found');
         const completedAt = status === 'completed' ? new Date().toISOString() : null;
         await (0, pool_1.query)('UPDATE incidents SET status = ?, resolution = ?, completed_at = ? WHERE id = ?', [status, resolution, completedAt, req.params.id]);
+        if (existing.unit_id && existing.object_id) {
+            await (0, unitStatusSync_1.syncUnitStatusFromIncident)({
+                unitId: existing.unit_id,
+                clientId: existing.client_id,
+                objectId: existing.object_id,
+                incidentId: existing.id,
+                incidentStatus: status,
+            }, await actorFromReq(req));
+        }
         const incident = await (0, pool_1.queryOne)('SELECT * FROM incidents WHERE id = ?', [req.params.id]);
         res.json({ data: incident });
     }

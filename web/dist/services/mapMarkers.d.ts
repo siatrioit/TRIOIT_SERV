@@ -19,8 +19,6 @@ export type MapMarker = {
     open_incident_count: number;
     open_incidents: MapOpenIncident[];
 };
-declare const OPEN_STATUSES: readonly ["pending", "in_progress", "paused"];
 export declare function saveMapMarkerCoords(objectId: string, latitude: number, longitude: number): Promise<void>;
 export declare function listMapMarkers(): Promise<MapMarker[]>;
-export { OPEN_STATUSES };
 //# sourceMappingURL=mapMarkers.d.ts.map
