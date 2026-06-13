@@ -4,11 +4,11 @@ export const OPEN_INCIDENT_STATUSES = ['pending', 'in_progress', 'paused'] as co
 export const CLOSED_INCIDENT_STATUSES = ['completed', 'cancelled'] as const;
 
 export const INCIDENT_STATUS_LABELS: Record<string, string> = {
-  pending: 'Gaida',
-  in_progress: 'Darbā',
-  paused: 'Pauze',
-  completed: 'Izpildīts',
-  cancelled: 'Atcelts',
+  pending: 'Atgadījums',
+  in_progress: 'Remontā',
+  paused: 'Remontā',
+  completed: 'Aktīva',
+  cancelled: 'Aktīva',
 };
 
 export const ALL_INCIDENT_STATUSES = [
@@ -37,11 +37,19 @@ export const FALLBACK_INCIDENT_STATUSES: IncidentStatusConfig[] = ALL_INCIDENT_S
               ? 'green'
               : 'red',
     sync_unit_status:
-      code === 'in_progress' || code === 'paused'
+      code === 'pending' || code === 'in_progress' || code === 'paused'
         ? 'repair'
         : code === 'completed' || code === 'cancelled'
           ? 'active'
           : null,
+    sync_activity_label:
+      code === 'pending'
+        ? 'Izsaukts meistars'
+        : code === 'in_progress' || code === 'paused'
+          ? 'Ierīce remontā'
+          : code === 'completed' || code === 'cancelled'
+            ? 'Ierīce aktīva'
+            : null,
   })
 );
 

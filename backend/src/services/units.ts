@@ -33,10 +33,17 @@ const UNIT_JOINS = `
   LEFT JOIN asset_type_components pac ON pac.id = pu.asset_component_id
 `;
 
+const OPEN_INCIDENT_COUNT_SQL = `
+  (SELECT COUNT(*) FROM incidents i
+   INNER JOIN incident_statuses st ON st.code = i.status AND st.category = 'open' AND st.is_active = 1
+   WHERE i.unit_id = u.id) AS open_incident_count
+`;
+
 export type UnitRow = Unit & {
   asset_type_code?: string | null;
   parent_serial_number?: string | null;
   parent_component_name?: string | null;
+  open_incident_count?: number;
 };
 
 type ResolvedUnitFields = {
@@ -141,7 +148,7 @@ export async function listUnitsForObject(
 ): Promise<UnitRow[]> {
   await assertObjectForClient(clientId, objectId);
   return query<UnitRow>(
-    `SELECT ${UNIT_SELECT}
+    `SELECT ${UNIT_SELECT}, ${OPEN_INCIDENT_COUNT_SQL}
      FROM units u
      ${UNIT_JOINS}
      WHERE u.client_id = ? AND u.object_id = ?
@@ -236,7 +243,8 @@ export async function updateUnitForObject(
   objectId: string,
   unitId: string,
   input: UnitUpdate,
-  actor?: UnitActor | null
+  actor?: UnitActor | null,
+  options?: { statusChangeNote?: string }
 ): Promise<UnitRow | null> {
   const existing = await getUnitForObject(clientId, objectId, unitId);
   if (!existing) return null;
@@ -319,11 +327,14 @@ export async function updateUnitForObject(
   }
 
   if (input.status !== undefined && input.status !== existing.status) {
+    const note = options?.statusChangeNote?.trim();
     await logUnitActivity(
       unitId,
-      'status_changed',
-      `Statuss: ${UNIT_STATUS_LABELS[existing.status] || existing.status} → ${UNIT_STATUS_LABELS[input.status] || input.status}`,
-      actor
+      note ? 'incident_sync' : 'status_changed',
+      note ||
+        `Statuss: ${UNIT_STATUS_LABELS[existing.status] || existing.status} → ${UNIT_STATUS_LABELS[input.status] || input.status}`,
+      actor,
+      note ? { source: 'incident' } : undefined
     );
   }
 

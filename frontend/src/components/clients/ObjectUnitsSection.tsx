@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '../../api/client';
 import {
-  UNIT_STATUS_LABELS,
   unitsApi,
   type Unit,
   type UnitInput,
@@ -10,6 +9,7 @@ import {
 } from '../../api/units';
 import { groupUnitsIntoTree } from '../../utils/unitTree';
 import { UnitModal } from '../units/UnitModal';
+import { UnitStatusBadge } from '../units/UnitStatusBadge';
 
 type ObjectUnitsSectionProps = {
   clientId: string;
@@ -24,11 +24,14 @@ type ModalState =
 
 function UnitMeta({ unit }: { unit: Unit }) {
   return (
-    <p className="text-xs text-gray-500 mt-0.5">
-      {UNIT_STATUS_LABELS[unit.status]}
-      {unit.manufacturer ? ` · ${unit.manufacturer}` : ''}
-      {unit.location_note ? ` · ${unit.location_note}` : ''}
-    </p>
+    <div className="mt-0.5">
+      <UnitStatusBadge status={unit.status} openIncidentCount={unit.open_incident_count} compact />
+      {(unit.manufacturer || unit.location_note) && (
+        <p className="text-xs text-gray-500 mt-0.5">
+          {[unit.manufacturer, unit.location_note].filter(Boolean).join(' · ')}
+        </p>
+      )}
+    </div>
   );
 }
 

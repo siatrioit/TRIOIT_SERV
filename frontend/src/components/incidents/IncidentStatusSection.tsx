@@ -37,6 +37,7 @@ export function IncidentStatusSection({
       queryClient.invalidateQueries({ queryKey: ['incidents'] });
       queryClient.invalidateQueries({ queryKey: ['unit-incidents'] });
       queryClient.invalidateQueries({ queryKey: ['customer-assets'] });
+      queryClient.invalidateQueries({ queryKey: ['object-units'] });
       queryClient.invalidateQueries({ queryKey: ['unit-activity'] });
       setError('');
     },

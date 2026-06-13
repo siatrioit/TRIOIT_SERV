@@ -25,6 +25,7 @@ export interface Unit {
   updated_at: string;
   client_name?: string;
   object_name?: string | null;
+  open_incident_count?: number;
 }
 
 export interface UnitInput {

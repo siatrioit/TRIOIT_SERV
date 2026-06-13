@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '../../api/client';
 import {
   BADGE_TONE_OPTIONS,
-  UNIT_STATUS_OPTIONS,
+  SYNC_UNIT_OPTIONS,
   incidentStatusesApi,
   type IncidentStatusCategory,
   type IncidentStatusConfig,
@@ -142,6 +142,7 @@ function StatusRow({
   const [category, setCategory] = useState(row.category);
   const [badgeTone, setBadgeTone] = useState(row.badge_tone ?? 'gray');
   const [syncUnit, setSyncUnit] = useState<UnitStatusCode | ''>(row.sync_unit_status ?? '');
+  const [syncActivityLabel, setSyncActivityLabel] = useState(row.sync_activity_label ?? '');
   const [active, setActive] = useState(Boolean(row.is_active ?? true));
 
   useEffect(() => {
@@ -149,14 +150,24 @@ function StatusRow({
     setCategory(row.category);
     setBadgeTone(row.badge_tone ?? 'gray');
     setSyncUnit(row.sync_unit_status ?? '');
+    setSyncActivityLabel(row.sync_activity_label ?? '');
     setActive(Boolean(row.is_active ?? true));
-  }, [row.id, row.label, row.category, row.badge_tone, row.sync_unit_status, row.is_active]);
+  }, [
+    row.id,
+    row.label,
+    row.category,
+    row.badge_tone,
+    row.sync_unit_status,
+    row.sync_activity_label,
+    row.is_active,
+  ]);
 
   const dirty =
     label !== row.label ||
     category !== row.category ||
     badgeTone !== (row.badge_tone ?? 'gray') ||
     (syncUnit || null) !== (row.sync_unit_status ?? null) ||
+    syncActivityLabel !== (row.sync_activity_label ?? '') ||
     active !== Boolean(row.is_active ?? true);
 
   return (
@@ -206,12 +217,18 @@ function StatusRow({
           onChange={(e) => setSyncUnit(e.target.value as UnitStatusCode | '')}
         >
           <option value="">— Nesinhronizēt aktīva statusu —</option>
-          {UNIT_STATUS_OPTIONS.map((o) => (
+          {SYNC_UNIT_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>
               Aktīvs → {o.label}
             </option>
           ))}
         </select>
+        <input
+          className="input-field sm:col-span-2"
+          placeholder="Žurnāla ieraksts (piem. Izsaukts meistars)"
+          value={syncActivityLabel}
+          onChange={(e) => setSyncActivityLabel(e.target.value)}
+        />
         <label className="flex items-center gap-2 text-sm sm:col-span-2">
           <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
           Aktīvs (redzams izvēlnēs)
@@ -229,6 +246,7 @@ function StatusRow({
               category,
               badge_tone: badgeTone,
               sync_unit_status: syncUnit || null,
+              sync_activity_label: syncActivityLabel.trim() || null,
               is_active: active,
             })
           }

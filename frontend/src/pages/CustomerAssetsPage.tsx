@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import {
-  UNIT_STATUS_LABELS,
   unitsApi,
   type Unit,
   type UnitInput,
@@ -11,16 +10,20 @@ import {
 } from '../api/units';
 import { CustomerAssetCreateModal } from '../components/units/CustomerAssetCreateModal';
 import { UnitModal } from '../components/units/UnitModal';
+import { UnitStatusBadge } from '../components/units/UnitStatusBadge';
 import { useAuthStore } from '../store/authStore';
 import { groupUnitsIntoTree } from '../utils/unitTree';
 
 function UnitMeta({ unit }: { unit: Unit }) {
   return (
-    <p className="text-xs text-gray-400 mt-1">
-      {UNIT_STATUS_LABELS[unit.status]}
-      {unit.manufacturer ? ` · ${unit.manufacturer}` : ''}
-      {unit.location_note ? ` · ${unit.location_note}` : ''}
-    </p>
+    <div className="mt-1">
+      <UnitStatusBadge status={unit.status} openIncidentCount={unit.open_incident_count} />
+      {(unit.manufacturer || unit.location_note) && (
+        <p className="text-xs text-gray-400 mt-1">
+          {[unit.manufacturer, unit.location_note].filter(Boolean).join(' · ')}
+        </p>
+      )}
+    </div>
   );
 }
 

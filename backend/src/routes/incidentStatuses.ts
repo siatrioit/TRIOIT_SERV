@@ -43,6 +43,7 @@ setupIncidentStatusesRouter.post('/', async (req, res, next) => {
         sort_order: z.number().int().optional(),
         badge_tone: z.string().max(30).nullable().optional(),
         sync_unit_status: z.enum(['active', 'repair', 'decommissioned', 'spare']).nullable().optional(),
+        sync_activity_label: z.string().max(100).nullable().optional(),
       })
       .parse(req.body);
     const data = await createIncidentStatus(body);
@@ -61,6 +62,7 @@ setupIncidentStatusesRouter.put('/:id', async (req, res, next) => {
         sort_order: z.number().int().optional(),
         badge_tone: z.string().max(30).nullable().optional(),
         sync_unit_status: z.enum(['active', 'repair', 'decommissioned', 'spare']).nullable().optional(),
+        sync_activity_label: z.string().max(100).nullable().optional(),
         is_active: z.boolean().optional(),
       })
       .parse(req.body);

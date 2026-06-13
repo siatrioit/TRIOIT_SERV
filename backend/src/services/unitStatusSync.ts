@@ -1,11 +1,11 @@
 import { queryOne } from '../db/pool';
+import { logUnitActivity, type UnitActor } from './unitActivity';
 import {
   listIncidentStatuses,
   statusByCode,
   type UnitStatusCode,
 } from './incidentStatuses';
 import { getUnitForObject, updateUnitForObject } from './units';
-import type { UnitActor } from './unitActivity';
 
 /**
  * Atjauno aktīva statusu pēc atgadījuma statusa konfigurācijas.
@@ -40,20 +40,86 @@ export async function syncUnitStatusFromIncident(
         [unitId, incidentId, ...openCodes]
       );
       if (otherOpen) {
-        targetUnitStatus = byCode.get(otherOpen.status)?.sync_unit_status ?? null;
+        const otherConfig = byCode.get(otherOpen.status);
+        targetUnitStatus = otherConfig?.sync_unit_status ?? null;
+        if (targetUnitStatus) {
+          await applyUnitSync({
+            unitId,
+            clientId,
+            objectId,
+            incidentId,
+            incidentStatus: otherOpen.status,
+            targetUnitStatus,
+            activityLabel: otherConfig?.sync_activity_label ?? null,
+            actor,
+          });
+          return;
+        }
       }
     }
-    if (!targetUnitStatus) {
-      targetUnitStatus = triggered.sync_unit_status ?? null;
-    }
+    targetUnitStatus = triggered.sync_unit_status ?? null;
   } else {
     targetUnitStatus = triggered.sync_unit_status ?? null;
   }
 
-  if (!targetUnitStatus) return;
+  const activityLabel = triggered.sync_activity_label ?? null;
+  if (!targetUnitStatus && !activityLabel?.trim()) return;
+
+  await applyUnitSync({
+    unitId,
+    clientId,
+    objectId,
+    incidentId,
+    incidentStatus,
+    targetUnitStatus,
+    activityLabel,
+    actor,
+  });
+}
+
+async function applyUnitSync(params: {
+  unitId: string;
+  clientId: string;
+  objectId: string;
+  incidentId: string;
+  incidentStatus: string;
+  targetUnitStatus: UnitStatusCode | null;
+  activityLabel: string | null;
+  actor?: UnitActor | null;
+}): Promise<void> {
+  const {
+    unitId,
+    clientId,
+    objectId,
+    incidentId,
+    incidentStatus,
+    targetUnitStatus,
+    activityLabel,
+    actor,
+  } = params;
 
   const unit = await getUnitForObject(clientId, objectId, unitId);
-  if (!unit || unit.status === targetUnitStatus) return;
+  if (!unit) return;
 
-  await updateUnitForObject(clientId, objectId, unitId, { status: targetUnitStatus }, actor);
+  const note = activityLabel?.trim() || undefined;
+  let statusChanged = false;
+
+  if (targetUnitStatus && unit.status !== targetUnitStatus) {
+    await updateUnitForObject(
+      clientId,
+      objectId,
+      unitId,
+      { status: targetUnitStatus },
+      actor,
+      { statusChangeNote: note }
+    );
+    statusChanged = true;
+  }
+
+  if (note && !statusChanged) {
+    await logUnitActivity(unitId, 'incident_sync', note, actor, {
+      incident_id: incidentId,
+      incident_status: incidentStatus,
+    });
+  }
 }

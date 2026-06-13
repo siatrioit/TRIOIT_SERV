@@ -57,11 +57,14 @@ unitsRouter.get('/', async (req, res, next) => {
       params
     );
 
-    const units = await query<UnitRow>(
+    const units = await query<UnitRow & { open_incident_count?: number }>(
       `SELECT u.*, c.name AS client_name, co.name AS object_name,
               at.name AS asset_type_name, at.code AS asset_type_code,
               ac.name AS asset_component_name,
-              pu.serial_number AS parent_serial_number
+              pu.serial_number AS parent_serial_number,
+              (SELECT COUNT(*) FROM incidents i
+               INNER JOIN incident_statuses st ON st.code = i.status AND st.category = 'open' AND st.is_active = 1
+               WHERE i.unit_id = u.id) AS open_incident_count
        FROM units u
        JOIN clients c ON c.id = u.client_id
        LEFT JOIN client_objects co ON co.id = u.object_id

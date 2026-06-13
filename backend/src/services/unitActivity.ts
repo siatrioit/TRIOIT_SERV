@@ -5,6 +5,7 @@ export type UnitActivityAction =
   | 'created'
   | 'updated'
   | 'status_changed'
+  | 'incident_sync'
   | 'linked_to_parent'
   | 'moved_to_parent'
   | 'unlinked_from_parent'

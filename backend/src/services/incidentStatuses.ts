@@ -13,6 +13,7 @@ export interface IncidentStatusRow {
   sort_order: number;
   badge_tone: string | null;
   sync_unit_status: UnitStatusCode | null;
+  sync_activity_label?: string | null;
   is_active: number | boolean;
   created_at: string;
   updated_at: string;
@@ -100,6 +101,7 @@ export async function createIncidentStatus(input: {
   sort_order?: number;
   badge_tone?: string | null;
   sync_unit_status?: UnitStatusCode | null;
+  sync_activity_label?: string | null;
 }): Promise<IncidentStatusRow> {
   let code = input.code?.trim() || slugifyCode(input.label);
   const existingCode = await queryOne('SELECT id FROM incident_statuses WHERE code = ?', [code]);
@@ -119,8 +121,8 @@ export async function createIncidentStatus(input: {
     10;
 
   await query(
-    `INSERT INTO incident_statuses (id, code, label, category, sort_order, badge_tone, sync_unit_status)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO incident_statuses (id, code, label, category, sort_order, badge_tone, sync_unit_status, sync_activity_label)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       code,
@@ -129,6 +131,7 @@ export async function createIncidentStatus(input: {
       sortOrder,
       input.badge_tone ?? 'gray',
       input.sync_unit_status ?? null,
+      input.sync_activity_label?.trim() || null,
     ]
   );
 
@@ -144,6 +147,7 @@ export async function updateIncidentStatus(
     sort_order?: number;
     badge_tone?: string | null;
     sync_unit_status?: UnitStatusCode | null;
+    sync_activity_label?: string | null;
     is_active?: boolean;
   }
 ): Promise<IncidentStatusRow | null> {
@@ -160,6 +164,9 @@ export async function updateIncidentStatus(
   if (input.sort_order !== undefined) updates.sort_order = input.sort_order;
   if (input.badge_tone !== undefined) updates.badge_tone = input.badge_tone;
   if (input.sync_unit_status !== undefined) updates.sync_unit_status = input.sync_unit_status;
+  if (input.sync_activity_label !== undefined) {
+    updates.sync_activity_label = input.sync_activity_label?.trim() || null;
+  }
   if (input.is_active !== undefined) updates.is_active = input.is_active ? 1 : 0;
 
   const fields = Object.keys(updates);

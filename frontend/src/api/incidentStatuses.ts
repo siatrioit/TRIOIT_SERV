@@ -11,12 +11,13 @@ export interface IncidentStatusConfig {
   sort_order: number;
   badge_tone: string | null;
   sync_unit_status: UnitStatusCode | null;
+  sync_activity_label?: string | null;
   is_active?: boolean | number;
 }
 
-export const UNIT_STATUS_OPTIONS: { value: UnitStatusCode; label: string }[] = [
-  { value: 'active', label: 'Aktīva' },
+export const SYNC_UNIT_OPTIONS: { value: UnitStatusCode; label: string }[] = [
   { value: 'repair', label: 'Remontā' },
+  { value: 'active', label: 'Aktīva' },
   { value: 'decommissioned', label: 'Izņemta' },
   { value: 'spare', label: 'Rezerve' },
 ];
@@ -40,6 +41,7 @@ export const incidentStatusesApi = {
     sort_order?: number;
     badge_tone?: string | null;
     sync_unit_status?: UnitStatusCode | null;
+    sync_activity_label?: string | null;
   }) => api.post<{ data: IncidentStatusConfig }>('/setup/incident-statuses', data),
   update: (
     id: string,
@@ -49,6 +51,7 @@ export const incidentStatusesApi = {
       sort_order: number;
       badge_tone: string | null;
       sync_unit_status: UnitStatusCode | null;
+      sync_activity_label: string | null;
       is_active: boolean;
     }>
   ) => api.put<{ data: IncidentStatusConfig }>(`/setup/incident-statuses/${id}`, data),
