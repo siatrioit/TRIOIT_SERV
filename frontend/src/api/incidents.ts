@@ -4,6 +4,7 @@ export interface Incident {
   id: string;
   incident_number: string;
   client_id: string;
+  client_name?: string | null;
   title: string;
   description?: string;
   status: string;
@@ -16,6 +17,7 @@ export interface Incident {
   unit_serial?: string | null;
   unit_type?: string | null;
   unit_model?: string | null;
+  asset_type_name?: string | null;
   assigned_to?: string | null;
   assigned_user_name?: string | null;
   asset_component_id?: string | null;

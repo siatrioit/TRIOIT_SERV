@@ -75,43 +75,48 @@ export async function buildIncidentScopeClause(
     params.push(clientId);
   }
 
-  const objectScopeIds = grantObjectIds(grants);
-
-  if (clientScopeIds.length === 0) {
-    if (objectScopeIds.length === 1) {
-      const objectId = objectScopeIds[0];
-      parts.push('i.object_id = ?');
-      params.push(objectId);
-      parts.push(
-        'i.unit_id IN (SELECT u.id FROM units u WHERE u.object_id = ?)'
-      );
-      params.push(objectId);
-    } else if (objectScopeIds.length > 1) {
-      const placeholders = objectScopeIds.map(() => '?').join(', ');
-      parts.push(`i.object_id IN (${placeholders})`);
-      params.push(...objectScopeIds);
-      parts.push(
-        `i.unit_id IN (SELECT u.id FROM units u WHERE u.object_id IN (${placeholders}))`
-      );
-      params.push(...objectScopeIds);
-    }
-
-    // Vecāki izsaukumi bez object_id — visiem objekta līmeņa piekļuves klientiem
-    const objectOnlyClientIds = [
-      ...new Set(
-        grants
-          .filter((g) => normalizeScope(g.scope) === 'object')
-          .map((g) => g.client_id)
-      ),
-    ];
-
-    for (const clientId of objectOnlyClientIds) {
-      parts.push('(i.client_id = ? AND i.object_id IS NULL)');
-      params.push(clientId);
-    }
+  if (clientScopeIds.length > 0) {
+    return { clause: `(${parts.join(' OR ')})`, params };
   }
 
-  return { clause: parts.length ? `(${parts.join(' OR ')})` : '1 = 0', params };
+  const objectScopeIds = grantObjectIds(grants);
+
+  if (objectScopeIds.length === 0) {
+    return { clause: '1 = 0', params: [] };
+  }
+
+  if (objectScopeIds.length === 1) {
+    const objectId = objectScopeIds[0];
+    parts.push('i.object_id = ?');
+    params.push(objectId);
+    parts.push(
+      'EXISTS (SELECT 1 FROM units u WHERE u.id = i.unit_id AND u.object_id = ?)'
+    );
+    params.push(objectId);
+  } else {
+    const placeholders = objectScopeIds.map(() => '?').join(', ');
+    parts.push(`i.object_id IN (${placeholders})`);
+    params.push(...objectScopeIds);
+    parts.push(
+      `EXISTS (SELECT 1 FROM units u WHERE u.id = i.unit_id AND u.object_id IN (${placeholders}))`
+    );
+    params.push(...objectScopeIds);
+  }
+
+  const objectOnlyClientIds = [
+    ...new Set(
+      grants
+        .filter((g) => normalizeScope(g.scope) === 'object')
+        .map((g) => g.client_id)
+    ),
+  ];
+
+  for (const clientId of objectOnlyClientIds) {
+    parts.push('(i.client_id = ? AND i.object_id IS NULL)');
+    params.push(clientId);
+  }
+
+  return { clause: `(${parts.join(' OR ')})`, params };
 }
 
 export async function assertCanViewIncident(

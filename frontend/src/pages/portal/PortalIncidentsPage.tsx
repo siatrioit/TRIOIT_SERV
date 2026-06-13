@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import { ApiError } from '../../api/client';
 import { portalIncidentsApi } from '../../api/portalIncidents';
 import { PortalIncidentCard } from '../../components/portal/PortalIncidentCard';
 import { usePortalAuthStore } from '../../store/portalAuthStore';
@@ -12,6 +13,7 @@ function sortByName<T extends { name: string }>(items: T[]): T[] {
 }
 
 export function PortalIncidentsPage() {
+  const token = usePortalAuthStore((s) => s.token);
   const objects = usePortalAuthStore((s) => s.objects);
   const access = usePortalAuthStore((s) => s.access);
   const canWrite = portalUserCanWrite(access);
@@ -26,9 +28,13 @@ export function PortalIncidentsPage() {
         limit: '100',
         ...(objectFilter ? { object_id: objectFilter } : {}),
       }),
+    enabled: Boolean(token),
     refetchInterval: 30_000,
     refetchOnMount: 'always',
   });
+
+  const loadError =
+    error instanceof ApiError ? error.displayMessage : error ? 'Neizdevās ielādēt izsaukumus.' : null;
 
   const incidents = data?.data ?? [];
 
@@ -90,9 +96,16 @@ export function PortalIncidentsPage() {
         </Link>
       ) : null}
 
-      {error ? (
-        <div className="card text-red-700 text-sm">
-          Neizdevās ielādēt izsaukumus. Mēģiniet vēlreiz.
+      {loadError ? (
+        <div className="card text-red-700 text-sm space-y-2">
+          <p>{loadError}</p>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="text-emerald-700 font-medium text-sm"
+          >
+            Mēģināt vēlreiz
+          </button>
         </div>
       ) : isLoading ? (
         <div className="text-center py-8 text-gray-400">Ielādē...</div>
