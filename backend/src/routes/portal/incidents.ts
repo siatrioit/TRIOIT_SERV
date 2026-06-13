@@ -12,6 +12,7 @@ import {
 } from '../../services/portalScope';
 import {
   addPortalMessage,
+  countUnreadForPortal,
   listIncidentMessagesWithReadState,
   markIncidentRead,
 } from '../../services/incidentMessages';
@@ -101,18 +102,11 @@ portalIncidentsRouter.get('/', async (req, res, next) => {
       queryParams
     );
 
-    const incidents = await query<PortalIncidentRow>(
+    const rows = await query<Omit<PortalIncidentRow, 'unread_count'>>(
       `SELECT i.id, i.incident_number, i.client_id, i.object_id, i.title, i.description,
               i.status, i.priority, i.received_at, i.completed_at, i.resolution,
               c.name AS client_name, co.name AS object_name,
-              u.id AS unit_id, u.serial_number AS unit_serial, u.unit_type, u.model AS unit_model,
-              (SELECT COUNT(*) FROM incident_messages m
-               WHERE m.incident_id = i.id AND m.author_type = 'staff'
-               AND m.created_at > COALESCE(
-                 (SELECT r.last_read_at FROM incident_message_reads r
-                  WHERE r.incident_id = i.id AND r.reader_type = 'portal' AND r.reader_id = ?),
-                 '1970-01-01 00:00:00'
-               )) AS unread_count
+              u.id AS unit_id, u.serial_number AS unit_serial, u.unit_type, u.model AS unit_model
        FROM incidents i
        JOIN clients c ON c.id = i.client_id
        LEFT JOIN client_objects co ON co.id = i.object_id
@@ -120,7 +114,14 @@ portalIncidentsRouter.get('/', async (req, res, next) => {
        ${where}
        ORDER BY i.received_at DESC
        LIMIT ? OFFSET ?`,
-      [...queryParams, portalUserId, limit, offset]
+      [...queryParams, limit, offset]
+    );
+
+    const incidents = await Promise.all(
+      rows.map(async (row) => ({
+        ...row,
+        unread_count: await countUnreadForPortal(row.id, portalUserId),
+      }))
     );
 
     res.json({

@@ -28,7 +28,7 @@ function clearUnreadInListCache(
   variant: 'staff' | 'portal'
 ) {
   const listKey = variant === 'portal' ? 'portal-incidents' : 'incidents';
-  queryClient.setQueriesData<{ data: { id: string; unread_count?: number }[] }>(
+  queryClient.setQueriesData<{ data: Array<{ id: string; unread_count?: number }> }>(
     { queryKey: [listKey] },
     (old) => {
       if (!old?.data) return old;
