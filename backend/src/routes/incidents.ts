@@ -22,6 +22,13 @@ import {
 } from '../services/incidentStatuses';
 import { resolveStaffActorName } from '../services/unitActivity';
 import { syncUnitStatusFromIncident } from '../services/unitStatusSync';
+import {
+  listIncidentActivity,
+  logIncidentAssigned,
+  logIncidentCreated,
+  logIncidentStatusChanged,
+} from '../services/incidentActivity';
+import { isClosedIncidentStatus } from '../services/incidentStatuses';
 
 export const incidentsRouter = Router();
 incidentsRouter.use(authenticate);
@@ -164,6 +171,21 @@ incidentsRouter.get('/', async (req, res, next) => {
   }
 });
 
+incidentsRouter.get('/:id/activity', async (req, res, next) => {
+  try {
+    const existing = await queryOne<{ id: string }>(
+      'SELECT id FROM incidents WHERE id = ?',
+      [req.params.id]
+    );
+    if (!existing) throw new AppError(404, 'Incident not found');
+
+    const entries = await listIncidentActivity(req.params.id);
+    res.json({ data: entries });
+  } catch (err) {
+    next(err);
+  }
+});
+
 incidentsRouter.get('/:id', async (req, res, next) => {
   try {
     const incident = await queryOne<
@@ -258,6 +280,8 @@ incidentsRouter.post('/', authorize('admin', 'manager', 'technician'), async (re
       );
     }
 
+    await logIncidentCreated(id, statusCode, await actorFromReq(req));
+
     firePush(() =>
       notifyNewIncident({
         incidentId: id,
@@ -305,6 +329,9 @@ incidentsRouter.patch('/:id/assign', authorize('admin', 'manager', 'technician')
     await query('UPDATE incidents SET assigned_to = ? WHERE id = ?', [assignee.id, req.params.id]);
 
     const staffUserId = req.user!.userId;
+    const actor = await actorFromReq(req);
+    await logIncidentAssigned(req.params.id, assignee.full_name, actor);
+
     await addStaffMessage(
       req.params.id,
       staffUserId,
@@ -419,15 +446,27 @@ incidentsRouter.patch('/:id/status', authorize('admin', 'manager', 'technician')
       unit_id: string | null;
       client_id: string;
       object_id: string | null;
-    }>('SELECT id, unit_id, client_id, object_id FROM incidents WHERE id = ?', [req.params.id]);
+      status: string;
+    }>('SELECT id, unit_id, client_id, object_id, status FROM incidents WHERE id = ?', [req.params.id]);
     if (!existing) throw new AppError(404, 'Incident not found');
 
-    const completedAt = status === 'completed' ? new Date().toISOString() : null;
+    const closed = await isClosedIncidentStatus(status);
+    const completedAt = closed ? new Date().toISOString() : null;
 
     await query(
       'UPDATE incidents SET status = ?, resolution = ?, completed_at = ? WHERE id = ?',
       [status, resolution, completedAt, req.params.id]
     );
+
+    if (existing.status !== status) {
+      await logIncidentStatusChanged(
+        req.params.id,
+        existing.status,
+        status,
+        await actorFromReq(req),
+        resolution
+      );
+    }
 
     if (existing.unit_id && existing.object_id) {
       await syncUnitStatusFromIncident(

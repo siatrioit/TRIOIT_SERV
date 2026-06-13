@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { incidentsApi } from '../api/incidents';
 import { IncidentAssigneeSection } from '../components/incidents/IncidentAssigneeSection';
+import { IncidentActivityLog } from '../components/incidents/IncidentActivityLog';
 import { IncidentStatusSection } from '../components/incidents/IncidentStatusSection';
 import { IncidentMessageThread } from '../components/incidents/IncidentMessageThread';
 import { IncidentMaterialsSection } from '../components/incidents/IncidentMaterialsSection';
@@ -78,6 +79,8 @@ export function IncidentDetailPage() {
           canEdit={canPost}
         />
       )}
+
+      {id && <IncidentActivityLog incidentId={id} />}
 
       {id && (
         <IncidentAssigneeSection

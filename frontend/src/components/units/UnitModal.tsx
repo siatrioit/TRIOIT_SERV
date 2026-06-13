@@ -231,7 +231,7 @@ export function UnitModal({
         <div className="bg-red-50 text-red-700 px-4 py-3 rounded-xl text-sm mb-4">{error}</div>
       )}
 
-      <div className="space-y-3">
+      <div className="min-w-0 space-y-3">
         {mode === 'create' && !forceSubAsset && (
           <div>
             <label className="text-sm text-gray-600 mb-1 block">Aktīva veids</label>

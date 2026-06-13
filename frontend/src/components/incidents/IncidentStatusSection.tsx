@@ -35,6 +35,7 @@ export function IncidentStatusSection({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['incident', incidentId] });
       queryClient.invalidateQueries({ queryKey: ['incidents'] });
+      queryClient.invalidateQueries({ queryKey: ['incident-activity', incidentId] });
       queryClient.invalidateQueries({ queryKey: ['unit-incidents'] });
       queryClient.invalidateQueries({ queryKey: ['customer-assets'] });
       queryClient.invalidateQueries({ queryKey: ['object-units'] });

@@ -25,6 +25,17 @@ export interface Incident {
   unread_count?: number;
 }
 
+export interface IncidentActivityEntry {
+  id: string;
+  incident_id: string;
+  action: 'created' | 'status_changed' | 'assigned';
+  description: string;
+  actor_user_id?: string | null;
+  actor_name?: string | null;
+  metadata?: Record<string, unknown> | null;
+  created_at: string;
+}
+
 export interface PaginatedResponse<T> {
   data: T[];
   pagination: {
@@ -43,6 +54,9 @@ export const incidentsApi = {
 
   get: (id: string) =>
     api.get<{ data: Incident }>(`/incidents/${id}`),
+
+  listActivity: (id: string) =>
+    api.get<{ data: IncidentActivityEntry[] }>(`/incidents/${id}/activity`),
 
   create: (data: Partial<Incident>) =>
     api.post<{ data: Incident }>('/incidents', data),

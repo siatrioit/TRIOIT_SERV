@@ -35,7 +35,7 @@ export function Modal({ open, title, onClose, children, footer }: ModalProps) {
       <div
         role="dialog"
         aria-modal="true"
-        className="relative z-10 flex w-full sm:max-w-lg max-h-[92vh] sm:max-h-[85vh] flex-col rounded-t-2xl sm:rounded-2xl bg-white shadow-xl"
+        className="relative z-10 flex w-full min-w-0 sm:max-w-lg max-h-[92vh] sm:max-h-[85vh] flex-col rounded-t-2xl sm:rounded-2xl bg-white shadow-xl"
       >
         <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 sm:px-5">
           <h3 className="text-lg font-semibold text-gray-900 truncate">{title}</h3>
@@ -48,7 +48,7 @@ export function Modal({ open, title, onClose, children, footer }: ModalProps) {
             ✕
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5">{children}</div>
+        <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden px-4 py-4 sm:px-5">{children}</div>
         {footer && (
           <div className="border-t border-gray-100 px-4 py-3 sm:px-5 flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
             {footer}

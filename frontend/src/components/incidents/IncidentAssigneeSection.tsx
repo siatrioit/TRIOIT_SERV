@@ -38,6 +38,7 @@ export function IncidentAssigneeSection({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['incident', incidentId] });
       queryClient.invalidateQueries({ queryKey: ['incidents'] });
+      queryClient.invalidateQueries({ queryKey: ['incident-activity', incidentId] });
       queryClient.invalidateQueries({ queryKey: ['incident-messages', incidentId] });
       setError('');
     },

@@ -22,6 +22,7 @@ import { resolveAssetComponentId } from '../../services/assetTypes';
 import { firePush, notifyNewIncident, notifyPortalChatMessage } from '../../services/pushNotifications';
 import { getDefaultIncidentStatusCode, sqlInActiveStatusCodes } from '../../services/incidentStatuses';
 import { syncUnitStatusFromIncident } from '../../services/unitStatusSync';
+import { logIncidentCreated } from '../../services/incidentActivity';
 
 export const portalIncidentsRouter = Router();
 
@@ -235,6 +236,11 @@ portalIncidentsRouter.post('/', async (req, res, next) => {
         null
       );
     }
+
+    await logIncidentCreated(id, defaultStatus, {
+      userId: portalUserId,
+      userName: reporter?.full_name ?? 'Klienta portāls',
+    });
 
     const incident = await queryOne<PortalIncidentRow>(
       `SELECT i.id, i.incident_number, i.client_id, i.object_id, i.title, i.description,
