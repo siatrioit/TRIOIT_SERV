@@ -16,6 +16,8 @@ export declare function getUnitForObject(clientId: string, objectId: string, uni
 export declare function createUnitForObject(clientId: string, objectId: string, input: UnitInput, actor?: UnitActor | null): Promise<UnitRow>;
 export declare function updateUnitForObject(clientId: string, objectId: string, unitId: string, input: UnitUpdate, actor?: UnitActor | null, options?: {
     statusChangeNote?: string;
+    incidentId?: string;
+    incidentStatus?: string;
 }): Promise<UnitRow | null>;
 export declare function deleteUnitForObject(clientId: string, objectId: string, unitId: string, actor?: UnitActor | null): Promise<void>;
 export declare function listPortalUnitsForObject(objectId: string, clientWideIds: string[], objectScopedIds: string[]): Promise<UnitRow[]>;

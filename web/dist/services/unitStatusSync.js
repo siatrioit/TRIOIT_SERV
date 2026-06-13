@@ -69,7 +69,7 @@ async function applyUnitSync(params) {
     const note = activityLabel?.trim() || undefined;
     let statusChanged = false;
     if (targetUnitStatus && unit.status !== targetUnitStatus) {
-        await (0, units_1.updateUnitForObject)(clientId, objectId, unitId, { status: targetUnitStatus }, actor, { statusChangeNote: note });
+        await (0, units_1.updateUnitForObject)(clientId, objectId, unitId, { status: targetUnitStatus }, actor, { statusChangeNote: note, incidentId, incidentStatus });
         statusChanged = true;
     }
     if (note && !statusChanged) {

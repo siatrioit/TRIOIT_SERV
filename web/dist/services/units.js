@@ -201,7 +201,7 @@ async function updateUnitForObject(clientId, objectId, unitId, input, actor, opt
     if (input.status !== undefined && input.status !== existing.status) {
         const note = options?.statusChangeNote?.trim();
         await (0, unitActivity_1.logUnitActivity)(unitId, note ? 'incident_sync' : 'status_changed', note ||
-            `Statuss: ${UNIT_STATUS_LABELS[existing.status] || existing.status} → ${UNIT_STATUS_LABELS[input.status] || input.status}`, actor, note ? { source: 'incident' } : undefined);
+            `Statuss: ${UNIT_STATUS_LABELS[existing.status] || existing.status} → ${UNIT_STATUS_LABELS[input.status] || input.status}`, actor, note ? { source: 'incident', incident_id: options?.incidentId, incident_status: options?.incidentStatus } : undefined);
     }
     const otherFields = fields.filter((f) => !['parent_unit_id', 'status', 'asset_type_id', 'unit_type', 'asset_component_id'].includes(f) &&
         (updates[f] ?? null) !== (existing[f] ?? null));
