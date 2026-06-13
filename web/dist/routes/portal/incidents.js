@@ -66,15 +66,28 @@ exports.portalIncidentsRouter.get('/', async (req, res, next) => {
               c.name AS client_name, co.name AS object_name,
               u.id AS unit_id, u.serial_number AS unit_serial, u.unit_type, u.model AS unit_model,
               ac.name AS asset_component_name,
-              ${incidentMessages_1.PORTAL_UNREAD_COUNT_SQL} AS unread_count
+              (SELECT COUNT(*) FROM incident_messages m
+               WHERE m.incident_id = i.id AND m.author_type = 'staff'
+               AND m.created_at > GREATEST(
+                 COALESCE(r.last_read_at, '1970-01-01 00:00:00'),
+                 COALESCE(pm.last_at, '1970-01-01 00:00:00')
+               )) AS unread_count
        FROM incidents i
        JOIN clients c ON c.id = i.client_id
        LEFT JOIN client_objects co ON co.id = i.object_id
        LEFT JOIN units u ON u.id = i.unit_id
        LEFT JOIN asset_type_components ac ON ac.id = i.asset_component_id
+       LEFT JOIN incident_message_reads r
+         ON r.incident_id = i.id AND r.reader_type = 'portal' AND r.reader_id = ?
+       LEFT JOIN (
+         SELECT incident_id, MAX(created_at) AS last_at
+         FROM incident_messages
+         WHERE author_type = 'portal' AND author_portal_id = ?
+         GROUP BY incident_id
+       ) pm ON pm.incident_id = i.id
        ${where}
        ORDER BY i.received_at DESC
-       LIMIT ? OFFSET ?`, [...queryParams, portalUserId, portalUserId, portalUserId, limit, offset]);
+       LIMIT ? OFFSET ?`, [...queryParams, portalUserId, portalUserId, limit, offset]);
         res.json({
             data: incidents,
             pagination: (0, pagination_1.buildPaginationMeta)(countRow?.total ?? 0, page, limit),

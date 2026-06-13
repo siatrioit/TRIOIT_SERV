@@ -62,13 +62,15 @@ async function buildIncidentScopeClause(grants) {
             parts.push(`i.unit_id IN (SELECT u.id FROM units u WHERE u.object_id IN (${placeholders}))`);
             params.push(...objectScopeIds);
         }
-        // Vecāki izsaukumi bez object_id — tikai ja pieejams viens objekts
-        if (objectScopeIds.length === 1) {
-            const clientId = grants.find((g) => normalizeScope(g.scope) === 'object' && g.object_id === objectScopeIds[0])?.client_id;
-            if (clientId) {
-                parts.push('(i.client_id = ? AND i.object_id IS NULL)');
-                params.push(clientId);
-            }
+        // Vecāki izsaukumi bez object_id — visiem objekta līmeņa piekļuves klientiem
+        const objectOnlyClientIds = [
+            ...new Set(grants
+                .filter((g) => normalizeScope(g.scope) === 'object')
+                .map((g) => g.client_id)),
+        ];
+        for (const clientId of objectOnlyClientIds) {
+            parts.push('(i.client_id = ? AND i.object_id IS NULL)');
+            params.push(clientId);
         }
     }
     return { clause: parts.length ? `(${parts.join(' OR ')})` : '1 = 0', params };
