@@ -1,12 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.unitUpdateSchema = exports.unitInputSchema = exports.unitStatusSchema = exports.unitTypeSchema = void 0;
+exports.unitUpdateSchema = exports.unitInputSchema = exports.unitStatusSchema = void 0;
 const zod_1 = require("zod");
 const fields_1 = require("./fields");
-exports.unitTypeSchema = zod_1.z.enum(['computer', 'pos', 'printer', 'network', 'other']);
 exports.unitStatusSchema = zod_1.z.enum(['active', 'repair', 'decommissioned', 'spare']);
-exports.unitInputSchema = zod_1.z.object({
-    unit_type: exports.unitTypeSchema.default('other'),
+const unitFieldsSchema = zod_1.z.object({
+    asset_type_id: zod_1.z.string().uuid().optional(),
+    unit_type: zod_1.z.string().min(1).max(50).optional(),
+    asset_component_id: zod_1.z.string().uuid().nullable().optional(),
     serial_number: zod_1.z.string().min(1).max(100),
     model: fields_1.optionalString,
     manufacturer: fields_1.optionalString,
@@ -15,5 +16,9 @@ exports.unitInputSchema = zod_1.z.object({
     installed_at: fields_1.optionalString,
     notes: fields_1.optionalString,
 });
-exports.unitUpdateSchema = exports.unitInputSchema.partial();
+exports.unitInputSchema = unitFieldsSchema.refine((data) => Boolean(data.asset_type_id || data.unit_type), {
+    message: 'Norādiet aktīva tipu',
+    path: ['asset_type_id'],
+});
+exports.unitUpdateSchema = unitFieldsSchema.partial();
 //# sourceMappingURL=unit.js.map

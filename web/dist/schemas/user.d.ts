@@ -31,14 +31,14 @@ export declare const updateUserSchema: z.ZodObject<{
     role?: "admin" | "manager" | "technician" | "viewer" | undefined;
     email?: string | undefined;
     phone?: string | undefined;
-    full_name?: string | undefined;
     is_active?: boolean | undefined;
+    full_name?: string | undefined;
 }, {
     password?: string | undefined;
     role?: "admin" | "manager" | "technician" | "viewer" | undefined;
     email?: string | undefined;
     phone?: unknown;
-    full_name?: string | undefined;
     is_active?: boolean | undefined;
+    full_name?: string | undefined;
 }>;
 //# sourceMappingURL=user.d.ts.map

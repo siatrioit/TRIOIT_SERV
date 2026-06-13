@@ -1,5 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.getLastReadAt = getLastReadAt;
+exports.listIncidentMessagesWithReadState = listIncidentMessagesWithReadState;
 exports.assertIncidentExists = assertIncidentExists;
 exports.listIncidentMessages = listIncidentMessages;
 exports.addStaffMessage = addStaffMessage;
@@ -12,6 +14,21 @@ const pool_1 = require("../db/pool");
 const errorHandler_1 = require("../middleware/errorHandler");
 const portalScope_1 = require("./portalScope");
 const portalPermissions_1 = require("./portalPermissions");
+async function getLastReadAt(incidentId, readerType, readerId) {
+    const row = await (0, pool_1.queryOne)(`SELECT last_read_at FROM incident_message_reads
+     WHERE incident_id = ? AND reader_type = ? AND reader_id = ?`, [incidentId, readerType, readerId]);
+    return row?.last_read_at ?? null;
+}
+async function listIncidentMessagesWithReadState(incidentId, readerType, readerId) {
+    const messages = await listIncidentMessages(incidentId);
+    const lastReadAt = await getLastReadAt(incidentId, readerType, readerId);
+    const cutoff = lastReadAt ?? '1970-01-01 00:00:00';
+    const unreadFrom = readerType === 'portal' ? 'staff' : 'portal';
+    return messages.map((m) => ({
+        ...m,
+        is_unread: m.author_type === unreadFrom && m.created_at > cutoff,
+    }));
+}
 async function assertIncidentExists(incidentId) {
     const row = await (0, pool_1.queryOne)('SELECT id FROM incidents WHERE id = ?', [incidentId]);
     if (!row)
@@ -48,8 +65,24 @@ async function addPortalMessage(incidentId, portalUserId, grants, body) {
 }
 async function markIncidentRead(incidentId, readerType, readerId) {
     await (0, pool_1.query)(`INSERT INTO incident_message_reads (incident_id, reader_type, reader_id, last_read_at)
-     VALUES (?, ?, ?, NOW())
-     ON DUPLICATE KEY UPDATE last_read_at = NOW()`, [incidentId, readerType, readerId]);
+     VALUES (
+       ?, ?, ?,
+       GREATEST(
+         NOW(),
+         COALESCE(
+           (SELECT MAX(created_at) FROM incident_messages WHERE incident_id = ?),
+           NOW()
+         )
+       )
+     )
+     ON DUPLICATE KEY UPDATE last_read_at = GREATEST(
+       last_read_at,
+       NOW(),
+       COALESCE(
+         (SELECT MAX(created_at) FROM incident_messages WHERE incident_id = ?),
+         NOW()
+       )
+     )`, [incidentId, readerType, readerId, incidentId, incidentId]);
 }
 async function countUnreadForPortal(incidentId, portalUserId) {
     const row = await (0, pool_1.queryOne)(`SELECT COUNT(*) AS total FROM incident_messages m

@@ -11,12 +11,14 @@ const portalScope_1 = require("../../services/portalScope");
 const incidentMessages_1 = require("../../services/incidentMessages");
 const units_1 = require("../../services/units");
 const incidentAssignment_1 = require("../../services/incidentAssignment");
+const assetTypes_1 = require("../../services/assetTypes");
 const pushNotifications_1 = require("../../services/pushNotifications");
 exports.portalIncidentsRouter = (0, express_1.Router)();
 const createSchema = zod_1.z.object({
     client_id: zod_1.z.string().uuid(),
     object_id: zod_1.z.string().uuid(),
     unit_id: zod_1.z.string().uuid().optional(),
+    asset_component_id: zod_1.z.string().uuid().optional(),
     title: zod_1.z.string().min(1).max(255),
     description: zod_1.z.string().optional(),
     priority: zod_1.z.enum(['low', 'medium', 'high']).default('medium'),
@@ -45,7 +47,13 @@ exports.portalIncidentsRouter.get('/', async (req, res, next) => {
             where += ' AND i.object_id = ?';
             queryParams.push(objectId);
         }
-        if (status) {
+        if (status === 'open') {
+            where += " AND i.status IN ('pending', 'in_progress', 'paused')";
+        }
+        else if (status === 'closed') {
+            where += " AND i.status IN ('completed', 'cancelled')";
+        }
+        else if (status) {
             where += ' AND i.status = ?';
             queryParams.push(status);
         }
@@ -57,6 +65,7 @@ exports.portalIncidentsRouter.get('/', async (req, res, next) => {
               i.status, i.priority, i.received_at, i.completed_at, i.resolution,
               c.name AS client_name, co.name AS object_name,
               u.id AS unit_id, u.serial_number AS unit_serial, u.unit_type, u.model AS unit_model,
+              ac.name AS asset_component_name,
               (SELECT COUNT(*) FROM incident_messages m
                WHERE m.incident_id = i.id AND m.author_type = 'staff'
                AND m.created_at > COALESCE(
@@ -68,6 +77,7 @@ exports.portalIncidentsRouter.get('/', async (req, res, next) => {
        JOIN clients c ON c.id = i.client_id
        LEFT JOIN client_objects co ON co.id = i.object_id
        LEFT JOIN units u ON u.id = i.unit_id
+       LEFT JOIN asset_type_components ac ON ac.id = i.asset_component_id
        ${where}
        ORDER BY i.received_at DESC
        LIMIT ? OFFSET ?`, [...queryParams, portalUserId, limit, offset]);
@@ -87,11 +97,13 @@ exports.portalIncidentsRouter.get('/:id', async (req, res, next) => {
         const incident = await (0, pool_1.queryOne)(`SELECT i.id, i.incident_number, i.client_id, i.object_id, i.title, i.description,
               i.status, i.priority, i.received_at, i.completed_at, i.resolution,
               c.name AS client_name, co.name AS object_name,
-              u.id AS unit_id, u.serial_number AS unit_serial, u.unit_type, u.model AS unit_model
+              u.id AS unit_id, u.serial_number AS unit_serial, u.unit_type, u.model AS unit_model,
+              ac.name AS asset_component_name
        FROM incidents i
        JOIN clients c ON c.id = i.client_id
        LEFT JOIN client_objects co ON co.id = i.object_id
        LEFT JOIN units u ON u.id = i.unit_id
+       LEFT JOIN asset_type_components ac ON ac.id = i.asset_component_id
        WHERE i.id = ?`, [req.params.id]);
         if (!incident)
             throw new errorHandler_1.AppError(404, 'Izsaukums nav atrasts', 'NOT_FOUND');
@@ -113,15 +125,27 @@ exports.portalIncidentsRouter.post('/', async (req, res, next) => {
         const id = (0, uuid_1.v4)();
         const incidentNumber = generateIncidentNumber();
         const assignedTo = await (0, incidentAssignment_1.resolveIncidentAssignee)(body.object_id);
+        let assetComponentId = null;
+        if (body.asset_component_id) {
+            if (!body.unit_id) {
+                throw new errorHandler_1.AppError(400, 'Apakšsadaļu var norādīt tikai ar izvēlētu aktīvu', 'INVALID_ASSET_COMPONENT');
+            }
+            const unitRow = await (0, pool_1.queryOne)('SELECT asset_type_id FROM units WHERE id = ?', [body.unit_id]);
+            if (!unitRow?.asset_type_id) {
+                throw new errorHandler_1.AppError(400, 'Apakšsadaļa nav derīga', 'INVALID_ASSET_COMPONENT');
+            }
+            assetComponentId = await (0, assetTypes_1.resolveAssetComponentId)(body.asset_component_id, unitRow.asset_type_id);
+        }
         await (0, pool_1.query)(`INSERT INTO incidents (
-        id, incident_number, client_id, object_id, unit_id, reported_by, reported_via,
+        id, incident_number, client_id, object_id, unit_id, asset_component_id, reported_by, reported_via,
         title, description, status, priority, assigned_to
-      ) VALUES (?, ?, ?, ?, ?, ?, 'portal', ?, ?, 'pending', ?, ?)`, [
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'portal', ?, ?, 'pending', ?, ?)`, [
             id,
             incidentNumber,
             body.client_id,
             body.object_id,
             body.unit_id ?? null,
+            assetComponentId,
             reporter?.full_name ?? 'Klienta portāls',
             body.title,
             body.description ?? null,
@@ -131,11 +155,13 @@ exports.portalIncidentsRouter.post('/', async (req, res, next) => {
         const incident = await (0, pool_1.queryOne)(`SELECT i.id, i.incident_number, i.client_id, i.object_id, i.title, i.description,
               i.status, i.priority, i.received_at, i.completed_at, i.resolution,
               c.name AS client_name, co.name AS object_name,
-              u.id AS unit_id, u.serial_number AS unit_serial, u.unit_type, u.model AS unit_model
+              u.id AS unit_id, u.serial_number AS unit_serial, u.unit_type, u.model AS unit_model,
+              ac.name AS asset_component_name
        FROM incidents i
        JOIN clients c ON c.id = i.client_id
        LEFT JOIN client_objects co ON co.id = i.object_id
        LEFT JOIN units u ON u.id = i.unit_id
+       LEFT JOIN asset_type_components ac ON ac.id = i.asset_component_id
        WHERE i.id = ?`, [id]);
         (0, pushNotifications_1.firePush)(() => (0, pushNotifications_1.notifyNewIncident)({
             incidentId: id,
@@ -152,9 +178,9 @@ exports.portalIncidentsRouter.post('/', async (req, res, next) => {
 });
 exports.portalIncidentsRouter.get('/:id/messages', async (req, res, next) => {
     try {
-        const { access } = req.portalUser;
+        const { portalUserId, access } = req.portalUser;
         await (0, portalScope_1.assertCanViewIncident)(access, req.params.id);
-        const messages = await (0, incidentMessages_1.listIncidentMessages)(req.params.id);
+        const messages = await (0, incidentMessages_1.listIncidentMessagesWithReadState)(req.params.id, 'portal', portalUserId);
         res.json({ data: messages });
     }
     catch (err) {

@@ -12,6 +12,26 @@ exports.unitLabel = unitLabel;
 const uuid_1 = require("uuid");
 const pool_1 = require("../db/pool");
 const errorHandler_1 = require("../middleware/errorHandler");
+const assetTypes_1 = require("./assetTypes");
+const UNIT_SELECT = `
+  u.*,
+  at.name AS asset_type_name,
+  at.code AS asset_type_code,
+  ac.name AS asset_component_name
+`;
+const UNIT_JOINS = `
+  LEFT JOIN asset_types at ON at.id = u.asset_type_id
+  LEFT JOIN asset_type_components ac ON ac.id = u.asset_component_id
+`;
+async function resolveUnitTypeFields(input) {
+    const assetType = await (0, assetTypes_1.resolveAssetTypeId)(input.asset_type_id, input.unit_type);
+    const assetComponentId = await (0, assetTypes_1.resolveAssetComponentId)(input.asset_component_id, assetType.id);
+    return {
+        assetTypeId: assetType.id,
+        unitTypeCode: assetType.code,
+        assetComponentId,
+    };
+}
 async function assertObjectForClient(clientId, objectId) {
     const row = await (0, pool_1.queryOne)(`SELECT id FROM client_objects
      WHERE id = ? AND client_id = ? AND is_active = 1`, [objectId, clientId]);
@@ -20,12 +40,17 @@ async function assertObjectForClient(clientId, objectId) {
 }
 async function listUnitsForObject(clientId, objectId) {
     await assertObjectForClient(clientId, objectId);
-    return (0, pool_1.query)(`SELECT * FROM units
-     WHERE client_id = ? AND object_id = ?
-     ORDER BY unit_type ASC, serial_number ASC`, [clientId, objectId]);
+    return (0, pool_1.query)(`SELECT ${UNIT_SELECT}
+     FROM units u
+     ${UNIT_JOINS}
+     WHERE u.client_id = ? AND u.object_id = ?
+     ORDER BY at.sort_order ASC, u.serial_number ASC`, [clientId, objectId]);
 }
 async function getUnitForObject(clientId, objectId, unitId) {
-    return (0, pool_1.queryOne)(`SELECT * FROM units WHERE id = ? AND client_id = ? AND object_id = ?`, [unitId, clientId, objectId]);
+    return (0, pool_1.queryOne)(`SELECT ${UNIT_SELECT}
+     FROM units u
+     ${UNIT_JOINS}
+     WHERE u.id = ? AND u.client_id = ? AND u.object_id = ?`, [unitId, clientId, objectId]);
 }
 async function createUnitForObject(clientId, objectId, input) {
     await assertObjectForClient(clientId, objectId);
@@ -35,15 +60,18 @@ async function createUnitForObject(clientId, objectId, input) {
     if (dup) {
         throw new errorHandler_1.AppError(409, 'Sērijas numurs jau reģistrēts', 'SERIAL_EXISTS');
     }
+    const { assetTypeId, unitTypeCode, assetComponentId } = await resolveUnitTypeFields(input);
     const id = (0, uuid_1.v4)();
     await (0, pool_1.query)(`INSERT INTO units (
-      id, client_id, object_id, unit_type, serial_number, model, manufacturer,
-      status, location_note, installed_at, notes
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+      id, client_id, object_id, unit_type, asset_type_id, asset_component_id,
+      serial_number, model, manufacturer, status, location_note, installed_at, notes
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
         id,
         clientId,
         objectId,
-        input.unit_type,
+        unitTypeCode,
+        assetTypeId,
+        assetComponentId,
         input.serial_number.trim(),
         input.model ?? null,
         input.manufacturer ?? null,
@@ -52,7 +80,7 @@ async function createUnitForObject(clientId, objectId, input) {
         input.installed_at || null,
         input.notes ?? null,
     ]);
-    const unit = await (0, pool_1.queryOne)('SELECT * FROM units WHERE id = ?', [id]);
+    const unit = await getUnitForObject(clientId, objectId, id);
     return unit;
 }
 async function updateUnitForObject(clientId, objectId, unitId, input) {
@@ -68,12 +96,27 @@ async function updateUnitForObject(clientId, objectId, unitId, input) {
             throw new errorHandler_1.AppError(409, 'Sērijas numurs jau reģistrēts', 'SERIAL_EXISTS');
         }
     }
-    const fields = Object.keys(input);
+    const updates = { ...input };
+    if (input.asset_type_id !== undefined ||
+        input.unit_type !== undefined ||
+        input.asset_component_id !== undefined) {
+        const resolved = await resolveUnitTypeFields({
+            asset_type_id: input.asset_type_id ?? existing.asset_type_id ?? undefined,
+            unit_type: input.unit_type ?? existing.unit_type,
+            asset_component_id: input.asset_component_id !== undefined
+                ? input.asset_component_id
+                : existing.asset_component_id,
+        });
+        updates.unit_type = resolved.unitTypeCode;
+        updates.asset_type_id = resolved.assetTypeId;
+        updates.asset_component_id = resolved.assetComponentId;
+    }
+    const fields = Object.keys(updates).filter((k) => updates[k] !== undefined);
     if (fields.length === 0)
         return existing;
     const setClause = fields.map((f) => `${f} = ?`).join(', ');
     const values = fields.map((f) => {
-        const v = input[f];
+        const v = updates[f];
         if (f === 'serial_number' && typeof v === 'string')
             return v.trim();
         return v ?? null;
@@ -99,9 +142,11 @@ async function listPortalUnitsForObject(objectId, clientWideIds, objectScopedIds
     const canAccess = clientWideIds.includes(object.client_id) || objectScopedIds.includes(objectId);
     if (!canAccess)
         throw new errorHandler_1.AppError(403, 'Nav pieejas šim objektam', 'FORBIDDEN');
-    return (0, pool_1.query)(`SELECT * FROM units
-     WHERE object_id = ? AND status IN ('active', 'repair')
-     ORDER BY unit_type ASC, serial_number ASC`, [objectId]);
+    return (0, pool_1.query)(`SELECT ${UNIT_SELECT}
+     FROM units u
+     ${UNIT_JOINS}
+     WHERE u.object_id = ? AND u.status IN ('active', 'repair')
+     ORDER BY at.sort_order ASC, u.serial_number ASC`, [objectId]);
 }
 async function assertUnitForIncident(unitId, clientId, objectId) {
     const unit = await (0, pool_1.queryOne)(`SELECT id FROM units
@@ -112,15 +157,9 @@ async function assertUnitForIncident(unitId, clientId, objectId) {
     }
 }
 function unitLabel(unit) {
-    const typeLabels = {
-        computer: 'Dators',
-        pos: 'POS',
-        printer: 'Printeris',
-        network: 'Tīkls',
-        other: 'Cits',
-    };
-    const type = typeLabels[unit.unit_type] || unit.unit_type;
+    const type = unit.asset_type_name || unit.unit_type;
+    const component = unit.asset_component_name ? ` · ${unit.asset_component_name}` : '';
     const model = unit.model ? ` ${unit.model}` : '';
-    return `${type}${model} · ${unit.serial_number}`;
+    return `${type}${model}${component} · ${unit.serial_number}`;
 }
 //# sourceMappingURL=units.js.map

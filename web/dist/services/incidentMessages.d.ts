@@ -6,7 +6,10 @@ export type IncidentMessage = {
     author_name: string;
     body: string;
     created_at: string;
+    is_unread?: boolean;
 };
+export declare function getLastReadAt(incidentId: string, readerType: 'staff' | 'portal', readerId: string): Promise<string | null>;
+export declare function listIncidentMessagesWithReadState(incidentId: string, readerType: 'staff' | 'portal', readerId: string): Promise<IncidentMessage[]>;
 export declare function assertIncidentExists(incidentId: string): Promise<void>;
 export declare function listIncidentMessages(incidentId: string): Promise<IncidentMessage[]>;
 export declare function addStaffMessage(incidentId: string, staffUserId: string, body: string): Promise<IncidentMessage>;

@@ -13,7 +13,7 @@ exports.incidentMessagesRouter.use(auth_1.authenticate);
 exports.incidentMessagesRouter.get('/', async (req, res, next) => {
     try {
         const { incidentId } = req.params;
-        const messages = await (0, incidentMessages_1.listIncidentMessages)(incidentId);
+        const messages = await (0, incidentMessages_1.listIncidentMessagesWithReadState)(incidentId, 'staff', req.user.userId);
         res.json({ data: messages });
     }
     catch (err) {
