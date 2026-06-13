@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { VoiceInputButton } from '../components/ai/VoiceInputButton';
+import { AssetComponentPicker } from '../components/incidents/AssetComponentPicker';
 import { IncidentLocationPicker } from '../components/incidents/IncidentLocationPicker';
 import { aiApi } from '../api/ai';
 import { clientsApi } from '../api/clients';
 import { incidentsApi } from '../api/incidents';
+import { unitsApi } from '../api/units';
 
 export function NewIncidentPage() {
   const navigate = useNavigate();
@@ -18,6 +20,7 @@ export function NewIncidentPage() {
     unitId: searchParams.get('unitId') || '',
   });
   const [priority, setPriority] = useState('medium');
+  const [assetComponentId, setAssetComponentId] = useState('');
   const [needsReview, setNeedsReview] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -27,6 +30,18 @@ export function NewIncidentPage() {
     queryFn: () => clientsApi.get(location.clientId),
     enabled: Boolean(location.clientId),
   });
+
+  const { data: unitsData } = useQuery({
+    queryKey: ['object-units', location.clientId, location.objectId],
+    queryFn: () => unitsApi.listForObject(location.clientId, location.objectId),
+    enabled: Boolean(location.clientId && location.objectId),
+  });
+
+  const selectedUnit = unitsData?.data.find((u) => u.id === location.unitId);
+
+  useEffect(() => {
+    setAssetComponentId('');
+  }, [location.unitId]);
 
   useEffect(() => {
     if (!clientDetail?.data || location.objectId) return;
@@ -83,6 +98,7 @@ export function NewIncidentPage() {
         client_id: location.clientId,
         object_id: location.objectId || undefined,
         unit_id: location.unitId || undefined,
+        asset_component_id: assetComponentId || undefined,
         title,
         description,
         priority,
@@ -118,6 +134,12 @@ export function NewIncidentPage() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <IncidentLocationPicker value={location} onChange={setLocation} />
+
+        <AssetComponentPicker
+          unit={selectedUnit}
+          value={assetComponentId}
+          onChange={setAssetComponentId}
+        />
 
         <div>
           <label className="block text-sm font-medium mb-1">Virsraksts *</label>

@@ -18,6 +18,8 @@ export interface Incident {
   unit_model?: string | null;
   assigned_to?: string | null;
   assigned_user_name?: string | null;
+  asset_component_id?: string | null;
+  asset_component_name?: string | null;
   unread_count?: number;
 }
 
@@ -48,4 +50,7 @@ export const incidentsApi = {
 
   assign: (id: string, assignedTo: string) =>
     api.patch<{ data: Incident }>(`/incidents/${id}/assign`, { assigned_to: assignedTo }),
+
+  update: (id: string, data: { asset_component_id?: string | null }) =>
+    api.patch<{ data: Incident }>(`/incidents/${id}`, data),
 };

@@ -5,6 +5,7 @@ import { ApiError } from '../../api/client';
 import { portalIncidentsApi } from '../../api/portalIncidents';
 import { portalUnitsApi } from '../../api/portalUnits';
 import { unitDisplayLabel } from '../../api/units';
+import { AssetComponentPicker } from '../../components/incidents/AssetComponentPicker';
 import { usePortalAuthStore, type PortalObject } from '../../store/portalAuthStore';
 import { portalUserCanWrite } from '../../utils/portalPermissions';
 
@@ -36,6 +37,7 @@ export function PortalNewIncidentPage() {
   const [clientId, setClientId] = useState('');
   const [objectId, setObjectId] = useState('');
   const [unitId, setUnitId] = useState('');
+  const [assetComponentId, setAssetComponentId] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
@@ -59,6 +61,7 @@ export function PortalNewIncidentPage() {
   });
 
   const units = unitsData?.data ?? [];
+  const selectedUnit = units.find((u) => u.id === unitId);
 
   useEffect(() => {
     if (clients.length === 1) setClientId(clients[0].id);
@@ -71,7 +74,12 @@ export function PortalNewIncidentPage() {
 
   useEffect(() => {
     setUnitId('');
+    setAssetComponentId('');
   }, [objectId]);
+
+  useEffect(() => {
+    setAssetComponentId('');
+  }, [unitId]);
 
   useEffect(() => {
     if (filteredObjects.length === 1 && filteredObjects[0].id) {
@@ -97,6 +105,7 @@ export function PortalNewIncidentPage() {
         client_id: selectedObject.client_id,
         object_id: selectedObject.id,
         unit_id: unitId || undefined,
+        asset_component_id: assetComponentId || undefined,
         title: title.trim(),
         description: description.trim() || undefined,
         priority,
@@ -207,6 +216,14 @@ export function PortalNewIncidentPage() {
               </p>
             )}
           </div>
+        )}
+
+        {unitId && (
+          <AssetComponentPicker
+            unit={selectedUnit}
+            value={assetComponentId}
+            onChange={setAssetComponentId}
+          />
         )}
 
         <div>

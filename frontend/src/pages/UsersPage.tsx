@@ -65,7 +65,7 @@ export function UsersPage() {
     <div className="space-y-4 pb-8">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Lietotāji</h2>
+          <h3 className="font-medium text-gray-900">Lietotāji</h3>
           <p className="text-sm text-gray-500">
             {tab === 'staff' ? 'Darbinieku konti' : 'Klientu portāla konti'}
           </p>

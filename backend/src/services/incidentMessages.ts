@@ -11,7 +11,37 @@ export type IncidentMessage = {
   author_name: string;
   body: string;
   created_at: string;
+  is_unread?: boolean;
 };
+
+export async function getLastReadAt(
+  incidentId: string,
+  readerType: 'staff' | 'portal',
+  readerId: string
+): Promise<string | null> {
+  const row = await queryOne<{ last_read_at: string }>(
+    `SELECT last_read_at FROM incident_message_reads
+     WHERE incident_id = ? AND reader_type = ? AND reader_id = ?`,
+    [incidentId, readerType, readerId]
+  );
+  return row?.last_read_at ?? null;
+}
+
+export async function listIncidentMessagesWithReadState(
+  incidentId: string,
+  readerType: 'staff' | 'portal',
+  readerId: string
+): Promise<IncidentMessage[]> {
+  const messages = await listIncidentMessages(incidentId);
+  const lastReadAt = await getLastReadAt(incidentId, readerType, readerId);
+  const cutoff = lastReadAt ?? '1970-01-01 00:00:00';
+  const unreadFrom = readerType === 'portal' ? 'staff' : 'portal';
+
+  return messages.map((m) => ({
+    ...m,
+    is_unread: m.author_type === unreadFrom && m.created_at > cutoff,
+  }));
+}
 
 export async function assertIncidentExists(incidentId: string): Promise<void> {
   const row = await queryOne('SELECT id FROM incidents WHERE id = ?', [incidentId]);
@@ -91,9 +121,25 @@ export async function markIncidentRead(
 ): Promise<void> {
   await query(
     `INSERT INTO incident_message_reads (incident_id, reader_type, reader_id, last_read_at)
-     VALUES (?, ?, ?, NOW())
-     ON DUPLICATE KEY UPDATE last_read_at = NOW()`,
-    [incidentId, readerType, readerId]
+     VALUES (
+       ?, ?, ?,
+       GREATEST(
+         NOW(),
+         COALESCE(
+           (SELECT MAX(created_at) FROM incident_messages WHERE incident_id = ?),
+           NOW()
+         )
+       )
+     )
+     ON DUPLICATE KEY UPDATE last_read_at = GREATEST(
+       last_read_at,
+       NOW(),
+       COALESCE(
+         (SELECT MAX(created_at) FROM incident_messages WHERE incident_id = ?),
+         NOW()
+       )
+     )`,
+    [incidentId, readerType, readerId, incidentId, incidentId]
   );
 }
 

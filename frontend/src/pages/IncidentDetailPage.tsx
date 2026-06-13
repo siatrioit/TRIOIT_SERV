@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { incidentsApi } from '../api/incidents';
 import { IncidentAssigneeSection } from '../components/incidents/IncidentAssigneeSection';
+import { IncidentStatusSection } from '../components/incidents/IncidentStatusSection';
 import { IncidentMessageThread } from '../components/incidents/IncidentMessageThread';
 import { IncidentMaterialsSection } from '../components/incidents/IncidentMaterialsSection';
 import { IncidentWorkLogSection } from '../components/incidents/IncidentWorkLogSection';
@@ -59,7 +60,21 @@ export function IncidentDetailPage() {
               <span className="font-medium">{formatIncidentUnit(incident)}</span>
             </div>
           )}
+          {incident.asset_component_name && (
+            <div>
+              <span className="text-gray-500">Apakšsadaļa: </span>
+              <span className="font-medium">{incident.asset_component_name}</span>
+            </div>
+          )}
         </div>
+      )}
+
+      {id && (
+        <IncidentStatusSection
+          incidentId={id}
+          status={incident.status}
+          canEdit={canPost}
+        />
       )}
 
       {id && (

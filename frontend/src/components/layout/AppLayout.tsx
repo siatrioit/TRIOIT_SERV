@@ -24,10 +24,10 @@ export function AppLayout() {
           <AppBrand />
           {showUsersLink && (
             <Link
-              to="/users"
+              to="/setup"
               className="text-sm font-medium text-primary-100 hover:text-white shrink-0"
             >
-              Lietotāji
+              Iestatījumi
             </Link>
           )}
         </div>

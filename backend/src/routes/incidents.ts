@@ -14,6 +14,7 @@ import {
   notifyIncidentReassigned,
   notifyNewIncident,
 } from '../services/pushNotifications';
+import { resolveAssetComponentId } from '../services/assetTypes';
 
 export const incidentsRouter = Router();
 incidentsRouter.use(authenticate);
@@ -32,6 +33,7 @@ const incidentSchema = z.object({
   due_at: z.string().optional(),
   resolution: z.string().optional(),
   assigned_to: z.string().uuid().optional(),
+  asset_component_id: z.string().uuid().optional().nullable(),
   latitude: z.number().optional(),
   longitude: z.number().optional(),
   voice_transcript: z.string().optional(),
@@ -63,7 +65,14 @@ incidentsRouter.get('/', async (req, res, next) => {
       where += ' AND c.city = ?';
       params.push(city);
     }
-    if (status) { where += ' AND incidents.status = ?'; params.push(status); }
+    if (status === 'open') {
+      where += " AND incidents.status IN ('pending', 'in_progress', 'paused')";
+    } else if (status === 'closed') {
+      where += " AND incidents.status IN ('completed', 'cancelled')";
+    } else if (status) {
+      where += ' AND incidents.status = ?';
+      params.push(status);
+    }
     if (priority) { where += ' AND incidents.priority = ?'; params.push(priority); }
     if (assignedTo) { where += ' AND incidents.assigned_to = ?'; params.push(assignedTo); }
 
@@ -108,11 +117,13 @@ incidentsRouter.get('/:id', async (req, res, next) => {
     >(
       `SELECT i.*, co.name AS object_name,
               au.full_name AS assigned_user_name,
-              u.serial_number AS unit_serial, u.unit_type, u.model AS unit_model
+              u.serial_number AS unit_serial, u.unit_type, u.model AS unit_model,
+              ac.name AS asset_component_name
        FROM incidents i
        LEFT JOIN client_objects co ON co.id = i.object_id
        LEFT JOIN users au ON au.id = i.assigned_to
        LEFT JOIN units u ON u.id = i.unit_id
+       LEFT JOIN asset_type_components ac ON ac.id = i.asset_component_id
        WHERE i.id = ?`,
       [req.params.id]
     );
@@ -128,16 +139,32 @@ incidentsRouter.post('/', authorize('admin', 'manager', 'technician'), async (re
     const body = incidentSchema.parse(req.body);
     const location = await resolveIncidentLocation(body);
     const assignedTo = await resolveIncidentAssignee(location.object_id, body.assigned_to);
+
+    let assetComponentId: string | null = null;
+    if (body.asset_component_id) {
+      const unitRow = location.unit_id
+        ? await queryOne<{ asset_type_id: string | null }>(
+            'SELECT asset_type_id FROM units WHERE id = ?',
+            [location.unit_id]
+          )
+        : null;
+      if (!unitRow?.asset_type_id) {
+        throw new AppError(400, 'Apakšsadaļu var norādīt tikai ar izvēlētu aktīvu', 'INVALID_ASSET_COMPONENT');
+      }
+      assetComponentId = await resolveAssetComponentId(body.asset_component_id, unitRow.asset_type_id);
+    }
+
     const id = uuidv4();
     const incidentNumber = generateIncidentNumber();
 
     await query(
-      `INSERT INTO incidents (id, incident_number, client_id, object_id, unit_id, contract_id,
+      `INSERT INTO incidents (id, incident_number, client_id, object_id, unit_id, asset_component_id, contract_id,
         reported_by, reported_via, title, description, status, priority, due_at,
         assigned_to, latitude, longitude, voice_transcript, ai_confidence, ai_metadata, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id, incidentNumber, location.client_id, location.object_id, location.unit_id,
+        assetComponentId,
         body.contract_id ?? null,
         body.reported_by ?? null, body.reported_via || 'web', body.title, body.description ?? null,
         body.status, body.priority, body.due_at ?? null, assignedTo,
@@ -229,6 +256,71 @@ incidentsRouter.patch('/:id/assign', authorize('admin', 'manager', 'technician')
         assigneeId: assignee.id,
         excludeUserId: staffUserId,
       })
+    );
+
+    res.json({ data: incident });
+  } catch (err) {
+    next(err);
+  }
+});
+
+incidentsRouter.patch('/:id', authorize('admin', 'manager', 'technician'), async (req, res, next) => {
+  try {
+    const body = z
+      .object({
+        asset_component_id: z.string().uuid().nullable().optional(),
+      })
+      .parse(req.body);
+
+    const existing = await queryOne<{ id: string; unit_id: string | null }>(
+      'SELECT id, unit_id FROM incidents WHERE id = ?',
+      [req.params.id]
+    );
+    if (!existing) throw new AppError(404, 'Incident not found');
+
+    if (body.asset_component_id === undefined) {
+      throw new AppError(400, 'Nav ko atjaunināt', 'NO_FIELDS');
+    }
+
+    let assetComponentId: string | null = null;
+    if (body.asset_component_id) {
+      const unitRow = existing.unit_id
+        ? await queryOne<{ asset_type_id: string | null }>(
+            'SELECT asset_type_id FROM units WHERE id = ?',
+            [existing.unit_id]
+          )
+        : null;
+      if (!unitRow?.asset_type_id) {
+        throw new AppError(400, 'Apakšsadaļu var norādīt tikai ar piesaistītu aktīvu', 'INVALID_ASSET_COMPONENT');
+      }
+      assetComponentId = await resolveAssetComponentId(body.asset_component_id, unitRow.asset_type_id);
+    }
+
+    await query('UPDATE incidents SET asset_component_id = ? WHERE id = ?', [
+      assetComponentId,
+      req.params.id,
+    ]);
+
+    const incident = await queryOne<
+      Incident & {
+        object_name?: string | null;
+        unit_serial?: string | null;
+        unit_type?: string | null;
+        unit_model?: string | null;
+        asset_component_name?: string | null;
+      }
+    >(
+      `SELECT i.*, co.name AS object_name,
+              au.full_name AS assigned_user_name,
+              u.serial_number AS unit_serial, u.unit_type, u.model AS unit_model,
+              ac.name AS asset_component_name
+       FROM incidents i
+       LEFT JOIN client_objects co ON co.id = i.object_id
+       LEFT JOIN users au ON au.id = i.assigned_to
+       LEFT JOIN units u ON u.id = i.unit_id
+       LEFT JOIN asset_type_components ac ON ac.id = i.asset_component_id
+       WHERE i.id = ?`,
+      [req.params.id]
     );
 
     res.json({ data: incident });

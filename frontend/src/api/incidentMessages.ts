@@ -7,6 +7,7 @@ export interface IncidentMessage {
   author_name: string;
   body: string;
   created_at: string;
+  is_unread?: boolean;
 }
 
 export const incidentMessagesApi = {

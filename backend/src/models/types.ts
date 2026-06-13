@@ -107,7 +107,11 @@ export interface Unit {
   client_id: string;
   object_id?: string;
   contract_id?: string;
-  unit_type: UnitType;
+  unit_type: UnitType | string;
+  asset_type_id?: string | null;
+  asset_component_id?: string | null;
+  asset_type_name?: string | null;
+  asset_component_name?: string | null;
   serial_number: string;
   model?: string;
   manufacturer?: string;
@@ -137,6 +141,8 @@ export interface Incident {
   client_id: string;
   object_id?: string;
   unit_id?: string;
+  asset_component_id?: string | null;
+  asset_component_name?: string | null;
   contract_id?: string;
   reported_by?: string;
   reported_via?: string;

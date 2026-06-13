@@ -15,6 +15,8 @@ import { MapPage } from './pages/MapPage';
 import { WarehousePage } from './pages/WarehousePage';
 import { CustomerAssetsPage } from './pages/CustomerAssetsPage';
 import { UsersPage } from './pages/UsersPage';
+import { SetupLayout } from './components/layout/SetupLayout';
+import { AssetTypesSetupPage } from './pages/setup/AssetTypesSetupPage';
 import { PortalLoginPage } from './pages/portal/PortalLoginPage';
 import { PortalIncidentsPage } from './pages/portal/PortalIncidentsPage';
 import { PortalNewIncidentPage } from './pages/portal/PortalNewIncidentPage';
@@ -70,7 +72,12 @@ export default function App() {
         <Route path="assets" element={<CustomerAssetsPage />} />
         <Route path="warehouse" element={<WarehousePage />} />
         <Route path="map" element={<MapPage />} />
-        <Route path="users" element={<UsersPage />} />
+        <Route path="setup" element={<SetupLayout />}>
+          <Route index element={<Navigate to="/setup/users" replace />} />
+          <Route path="users" element={<UsersPage />} />
+          <Route path="asset-types" element={<AssetTypesSetupPage />} />
+        </Route>
+        <Route path="users" element={<Navigate to="/setup/users" replace />} />
       </Route>
     </Routes>
   );

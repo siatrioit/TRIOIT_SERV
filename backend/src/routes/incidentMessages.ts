@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { authenticate, authorize } from '../middleware/auth';
 import {
   addStaffMessage,
-  listIncidentMessages,
+  listIncidentMessagesWithReadState,
   markIncidentRead,
 } from '../services/incidentMessages';
 
@@ -20,7 +20,11 @@ incidentMessagesRouter.use(authenticate);
 incidentMessagesRouter.get('/', async (req: Request<Params>, res, next) => {
   try {
     const { incidentId } = req.params;
-    const messages = await listIncidentMessages(incidentId);
+    const messages = await listIncidentMessagesWithReadState(
+      incidentId,
+      'staff',
+      req.user!.userId
+    );
     res.json({ data: messages });
   } catch (err) {
     next(err);
