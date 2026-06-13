@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { portalAuthApi } from '../../api/portalAuth';
 import { usePortalAuthStore } from '../../store/portalAuthStore';
 import { portalUserCanWrite } from '../../utils/portalPermissions';
@@ -8,6 +8,7 @@ import { useAppVersionLabel } from '../../hooks/useAppVersionLabel';
 
 export function PortalLayout() {
   const versionLabel = useAppVersionLabel();
+  const queryClient = useQueryClient();
   const user = usePortalAuthStore((s) => s.user);
   const logout = usePortalAuthStore((s) => s.logout);
   const setSession = usePortalAuthStore((s) => s.setSession);
@@ -27,6 +28,7 @@ export function PortalLayout() {
 
   const handleLogout = () => {
     logout();
+    queryClient.clear();
     navigate('/portal/login', { replace: true });
   };
 
