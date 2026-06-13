@@ -1,5 +1,6 @@
 import { portalApi } from './portalClient';
 import type { IncidentMessage } from './incidentMessages';
+import type { CompletionAct, SignCompletionPayload } from './incidentCompletion';
 
 export interface PortalIncident {
   id: string;
@@ -55,4 +56,10 @@ export const portalIncidentsApi = {
 
   markRead: (incidentId: string) =>
     portalApi.post<{ success: boolean }>(`/incidents/${incidentId}/read`),
+
+  getCompletion: (incidentId: string) =>
+    portalApi.get<{ data: CompletionAct | null }>(`/incidents/${incidentId}/completion`),
+
+  signCompletion: (incidentId: string, payload: SignCompletionPayload) =>
+    portalApi.post<{ data: CompletionAct }>(`/incidents/${incidentId}/completion/sign`, payload),
 };

@@ -21,6 +21,10 @@ function actionLabel(action: IncidentActivityEntry['action']): string | null {
       return 'Piešķiršana';
     case 'created':
       return 'Reģistrēts';
+    case 'completion_signed':
+      return 'Izpildes apstiprinājums';
+    case 'act_generated':
+      return 'Akts izveidots';
     default:
       return null;
   }

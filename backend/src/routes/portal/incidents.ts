@@ -23,6 +23,10 @@ import { firePush, notifyNewIncident, notifyPortalChatMessage } from '../../serv
 import { getDefaultIncidentStatusCode, sqlInActiveStatusCodes } from '../../services/incidentStatuses';
 import { syncUnitStatusFromIncident } from '../../services/unitStatusSync';
 import { logIncidentCreated } from '../../services/incidentActivity';
+import {
+  getCompletionAct,
+  signCompletionAct,
+} from '../../services/incidentCompletion';
 
 export const portalIncidentsRouter = Router();
 
@@ -315,6 +319,41 @@ portalIncidentsRouter.post('/:id/messages', async (req, res, next) => {
     }
 
     res.status(201).json({ data: message });
+  } catch (err) {
+    next(err);
+  }
+});
+
+portalIncidentsRouter.get('/:id/completion', async (req, res, next) => {
+  try {
+    const { access } = req.portalUser!;
+    await assertCanViewIncident(access, req.params.id);
+    const data = await getCompletionAct(req.params.id);
+    res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+portalIncidentsRouter.post('/:id/completion/sign', async (req, res, next) => {
+  try {
+    const { portalUserId, access } = req.portalUser!;
+    await assertCanViewIncident(access, req.params.id);
+    const body = z
+      .object({
+        signer_name: z.string().min(1).max(255),
+        signature_type: z.enum(['typed', 'drawn']),
+        signature_data: z.string().min(1),
+      })
+      .parse(req.body);
+    const data = await signCompletionAct({
+      incidentId: req.params.id,
+      signerName: body.signer_name,
+      signatureType: body.signature_type,
+      signatureData: body.signature_data,
+      portalUserId,
+    });
+    res.json({ data });
   } catch (err) {
     next(err);
   }

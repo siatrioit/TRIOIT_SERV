@@ -16,6 +16,8 @@ export function IncidentCard({ incident }: { incident: Incident }) {
   const assigneeLine = formatIncidentAssigneeLine(incident);
   const isActiveWork = incident.status === 'in_progress' || incident.status === 'paused';
 
+  const unreadCount = Number(incident.unread_count) || 0;
+
   return (
     <Link to={`/incidents/${incident.id}`} className="card block active:bg-gray-50">
       <div className="flex justify-between items-start gap-3">
@@ -52,12 +54,12 @@ export function IncidentCard({ incident }: { incident: Incident }) {
         </div>
 
         <div className="flex flex-col gap-1 items-end shrink-0">
-          {incident.unread_count != null && incident.unread_count > 0 && (
+          {unreadCount > 0 && (
             <span
               className="text-xs bg-primary-100 text-primary-800 px-2 py-0.5 rounded-full font-medium"
               title="Neskatītas ziņas no klienta portāla"
             >
-              💬 {formatUnreadMessageBadge(incident.unread_count)}
+              💬 {formatUnreadMessageBadge(unreadCount)}
             </span>
           )}
           <PriorityBadge priority={incident.priority} />

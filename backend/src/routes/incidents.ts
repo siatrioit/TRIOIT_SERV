@@ -8,7 +8,7 @@ import { AppError } from '../middleware/errorHandler';
 import type { Incident } from '../models/types';
 import { resolveIncidentLocation } from '../services/incidentLocation';
 import { resolveIncidentAssignee, assertAssignableUser } from '../services/incidentAssignment';
-import { addStaffMessage } from '../services/incidentMessages';
+import { addStaffMessage, countUnreadForStaff } from '../services/incidentMessages';
 import {
   firePush,
   notifyIncidentReassigned,
@@ -29,6 +29,14 @@ import {
   logIncidentStatusChanged,
 } from '../services/incidentActivity';
 import { isClosedIncidentStatus } from '../services/incidentStatuses';
+import {
+  generateCompletionActPdf,
+  getCompletionAct,
+  getCompletionActPdfPath,
+  requestCompletionSignature,
+  signCompletionAct,
+} from '../services/incidentCompletion';
+import fs from 'fs';
 
 export const incidentsRouter = Router();
 incidentsRouter.use(authenticate);
@@ -128,7 +136,7 @@ incidentsRouter.get('/', async (req, res, next) => {
 
     const staffUserId = req.user!.userId;
 
-    const incidents = await query<
+    const rows = await query<
       Incident & {
         client_name?: string;
         object_name?: string | null;
@@ -137,7 +145,6 @@ incidentsRouter.get('/', async (req, res, next) => {
         unit_model?: string | null;
         asset_type_name?: string | null;
         asset_component_name?: string | null;
-        unread_count?: number;
       }
     >(
       `SELECT i.*,
@@ -148,18 +155,18 @@ incidentsRouter.get('/', async (req, res, next) => {
               u.unit_type,
               u.model AS unit_model,
               at.name AS asset_type_name,
-              ac.name AS asset_component_name,
-        (SELECT COUNT(*) FROM incident_messages m
-         WHERE m.incident_id = i.id AND m.author_type = 'portal'
-         AND m.created_at > COALESCE(
-           (SELECT r.last_read_at FROM incident_message_reads r
-            WHERE r.incident_id = i.id AND r.reader_type = 'staff' AND r.reader_id = ?),
-           '1970-01-01 00:00:00'
-         )) AS unread_count
+              ac.name AS asset_component_name
        ${fromClause}
        ${where}
        ORDER BY i.received_at DESC LIMIT ? OFFSET ?`,
-      [...params, staffUserId, limit, offset]
+      [...params, limit, offset]
+    );
+
+    const incidents = await Promise.all(
+      rows.map(async (row) => ({
+        ...row,
+        unread_count: await countUnreadForStaff(row.id, staffUserId),
+      }))
     );
 
     res.json({
@@ -181,6 +188,88 @@ incidentsRouter.get('/:id/activity', async (req, res, next) => {
 
     const entries = await listIncidentActivity(req.params.id);
     res.json({ data: entries });
+  } catch (err) {
+    next(err);
+  }
+});
+
+incidentsRouter.get('/:id/completion', async (req, res, next) => {
+  try {
+    const existing = await queryOne<{ id: string }>(
+      'SELECT id FROM incidents WHERE id = ?',
+      [req.params.id]
+    );
+    if (!existing) throw new AppError(404, 'Incident not found');
+    const data = await getCompletionAct(req.params.id);
+    res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+incidentsRouter.post(
+  '/:id/completion/request',
+  authorize('admin', 'manager', 'technician'),
+  async (req, res, next) => {
+    try {
+      const data = await requestCompletionSignature(req.params.id, req.user!.userId);
+      res.json({ data });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+incidentsRouter.post(
+  '/:id/completion/sign',
+  authorize('admin', 'manager', 'technician'),
+  async (req, res, next) => {
+    try {
+      const body = z
+        .object({
+          signer_name: z.string().min(1).max(255),
+          signature_type: z.enum(['typed', 'drawn']),
+          signature_data: z.string().min(1),
+        })
+        .parse(req.body);
+      const data = await signCompletionAct({
+        incidentId: req.params.id,
+        signerName: body.signer_name,
+        signatureType: body.signature_type,
+        signatureData: body.signature_data,
+        staffUserId: req.user!.userId,
+      });
+      res.json({ data });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+incidentsRouter.post(
+  '/:id/completion/generate-act',
+  authorize('admin', 'manager', 'technician'),
+  async (req, res, next) => {
+    try {
+      const data = await generateCompletionActPdf(req.params.id, req.user!.userId);
+      res.json({ data });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+incidentsRouter.get('/:id/completion/act.pdf', async (req, res, next) => {
+  try {
+    const existing = await queryOne<{ id: string }>(
+      'SELECT id FROM incidents WHERE id = ?',
+      [req.params.id]
+    );
+    if (!existing) throw new AppError(404, 'Incident not found');
+    const { path: pdfPath, filename } = await getCompletionActPdfPath(req.params.id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    fs.createReadStream(pdfPath).pipe(res);
   } catch (err) {
     next(err);
   }

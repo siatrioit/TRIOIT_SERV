@@ -5,6 +5,7 @@ import { formatIncidentUnit } from '../../utils/incidentUnit';
 import { portalUserCanWrite } from '../../utils/portalPermissions';
 import { usePortalAuthStore } from '../../store/portalAuthStore';
 import { IncidentMessageThread } from '../../components/incidents/IncidentMessageThread';
+import { IncidentCompletionSection } from '../../components/incidents/IncidentCompletionSection';
 import { PriorityBadge } from '../../components/incidents/PriorityBadge';
 import { StatusBadge } from '../../components/incidents/StatusBadge';
 import { useIncidentStatuses } from '../../hooks/useIncidentStatuses';
@@ -98,12 +99,19 @@ export function PortalIncidentDetailPage() {
       )}
 
       {id && (
-        <IncidentMessageThread
-          incidentId={id}
-          variant="portal"
-          canPost={canPost}
-          incidentClosed={isClosed(incident.status)}
-        />
+        <>
+          <IncidentCompletionSection
+            incidentId={id}
+            variant="portal"
+            canEdit={canPost}
+          />
+          <IncidentMessageThread
+            incidentId={id}
+            variant="portal"
+            canPost={canPost}
+            incidentClosed={isClosed(incident.status)}
+          />
+        </>
       )}
     </div>
   );

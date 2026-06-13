@@ -5,6 +5,10 @@ import type { IncidentMessage } from '../../api/incidentMessages';
 import { incidentMessagesApi } from '../../api/incidentMessages';
 import { portalIncidentsApi } from '../../api/portalIncidents';
 import { formatUnreadMessageBadge } from '../../utils/unreadMessages';
+import {
+  clearIncidentUnreadInLists,
+  invalidateIncidentLists,
+} from '../../utils/incidentListCache';
 
 type IncidentMessageThreadProps = {
   incidentId: string;
@@ -27,19 +31,7 @@ function clearUnreadInListCache(
   incidentId: string,
   variant: 'staff' | 'portal'
 ) {
-  const listKey = variant === 'portal' ? 'portal-incidents' : 'incidents';
-  queryClient.setQueriesData<{ data: Array<{ id: string; unread_count?: number }> }>(
-    { queryKey: [listKey] },
-    (old) => {
-      if (!old?.data) return old;
-      return {
-        ...old,
-        data: old.data.map((item) =>
-          item.id === incidentId ? { ...item, unread_count: 0 } : item
-        ),
-      };
-    }
-  );
+  clearIncidentUnreadInLists(queryClient, incidentId, variant);
 }
 
 async function markThreadRead(
@@ -54,9 +46,7 @@ async function markThreadRead(
     await incidentMessagesApi.markRead(incidentId);
   }
   clearUnreadInListCache(queryClient, incidentId, variant);
-  await queryClient.invalidateQueries({
-    queryKey: variant === 'portal' ? ['portal-incidents'] : ['incidents'],
-  });
+  await invalidateIncidentLists(queryClient, variant);
   queryClient.setQueryData<{ data: IncidentMessage[] }>(queryKey, (old) => {
     if (!old?.data) return old;
     return {

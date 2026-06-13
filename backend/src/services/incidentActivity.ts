@@ -2,7 +2,12 @@ import { v4 as uuidv4 } from 'uuid';
 import { query } from '../db/pool';
 import { listIncidentStatuses } from './incidentStatuses';
 
-export type IncidentActivityAction = 'created' | 'status_changed' | 'assigned';
+export type IncidentActivityAction =
+  | 'created'
+  | 'status_changed'
+  | 'assigned'
+  | 'completion_signed'
+  | 'act_generated';
 
 export interface IncidentActivityEntry {
   id: string;

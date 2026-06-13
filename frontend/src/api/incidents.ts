@@ -28,7 +28,7 @@ export interface Incident {
 export interface IncidentActivityEntry {
   id: string;
   incident_id: string;
-  action: 'created' | 'status_changed' | 'assigned';
+  action: 'created' | 'status_changed' | 'assigned' | 'completion_signed' | 'act_generated';
   description: string;
   actor_user_id?: string | null;
   actor_name?: string | null;

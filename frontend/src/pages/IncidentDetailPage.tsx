@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { incidentsApi } from '../api/incidents';
 import { IncidentAssigneeSection } from '../components/incidents/IncidentAssigneeSection';
 import { IncidentActivityLog } from '../components/incidents/IncidentActivityLog';
+import { IncidentCompletionSection } from '../components/incidents/IncidentCompletionSection';
 import { IncidentStatusSection } from '../components/incidents/IncidentStatusSection';
 import { IncidentMessageThread } from '../components/incidents/IncidentMessageThread';
 import { IncidentMaterialsSection } from '../components/incidents/IncidentMaterialsSection';
@@ -80,8 +81,6 @@ export function IncidentDetailPage() {
         />
       )}
 
-      {id && <IncidentActivityLog incidentId={id} />}
-
       {id && (
         <IncidentAssigneeSection
           incidentId={id}
@@ -99,6 +98,12 @@ export function IncidentDetailPage() {
             incidentClosed={isClosedStatus}
           />
           <IncidentMaterialsSection incidentId={id} />
+          <IncidentCompletionSection
+            incidentId={id}
+            variant="staff"
+            canEdit={canPost}
+          />
+          <IncidentActivityLog incidentId={id} />
           <IncidentMessageThread
             incidentId={id}
             variant="staff"

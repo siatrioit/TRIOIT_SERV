@@ -49,6 +49,28 @@ export async function getPortalReadWatermark(
   return row?.watermark ?? '1970-01-01 00:00:00';
 }
 
+export async function getStaffReadWatermark(
+  incidentId: string,
+  staffUserId: string
+): Promise<string> {
+  const row = await queryOne<{ watermark: string }>(
+    `SELECT GREATEST(
+      COALESCE(
+        (SELECT last_read_at FROM incident_message_reads
+         WHERE incident_id = ? AND reader_type = 'staff' AND reader_id = ?),
+        '1970-01-01 00:00:00'
+      ),
+      COALESCE(
+        (SELECT MAX(created_at) FROM incident_messages
+         WHERE incident_id = ? AND author_type = 'staff' AND author_staff_id = ?),
+        '1970-01-01 00:00:00'
+      )
+    ) AS watermark`,
+    [incidentId, staffUserId, incidentId, staffUserId]
+  );
+  return row?.watermark ?? '1970-01-01 00:00:00';
+}
+
 export async function listIncidentMessagesWithReadState(
   incidentId: string,
   readerType: 'staff' | 'portal',
@@ -58,7 +80,7 @@ export async function listIncidentMessagesWithReadState(
   const cutoff =
     readerType === 'portal'
       ? await getPortalReadWatermark(incidentId, readerId)
-      : (await getLastReadAt(incidentId, readerType, readerId)) ?? '1970-01-01 00:00:00';
+      : await getStaffReadWatermark(incidentId, readerId);
   const unreadFrom = readerType === 'portal' ? 'staff' : 'portal';
 
   return messages.map((m) => ({
@@ -106,6 +128,9 @@ export async function addStaffMessage(
     'SELECT id, incident_id, author_type, author_name, body, created_at FROM incident_messages WHERE id = ?',
     [id]
   );
+
+  await markIncidentRead(incidentId, 'staff', staffUserId);
+
   return message!;
 }
 
@@ -179,16 +204,13 @@ export async function countUnreadForStaff(
   incidentId: string,
   staffUserId: string
 ): Promise<number> {
+  const watermark = await getStaffReadWatermark(incidentId, staffUserId);
   const row = await queryOne<{ total: number }>(
     `SELECT COUNT(*) AS total FROM incident_messages m
      WHERE m.incident_id = ?
        AND m.author_type = 'portal'
-       AND m.created_at > COALESCE(
-         (SELECT r.last_read_at FROM incident_message_reads r
-          WHERE r.incident_id = m.incident_id AND r.reader_type = 'staff' AND r.reader_id = ?),
-         '1970-01-01 00:00:00'
-       )`,
-    [incidentId, staffUserId]
+       AND m.created_at > ?`,
+    [incidentId, watermark]
   );
   return row?.total ?? 0;
 }
