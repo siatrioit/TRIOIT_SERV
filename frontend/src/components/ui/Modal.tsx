@@ -6,9 +6,17 @@ type ModalProps = {
   onClose: () => void;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  /** default: mobile full / sm:max-w-lg; wide: sm:max-w-3xl; xl: sm:max-w-5xl lg:max-w-6xl */
+  size?: 'default' | 'wide' | 'xl';
 };
 
-export function Modal({ open, title, onClose, children, footer }: ModalProps) {
+const sizeClass: Record<NonNullable<ModalProps['size']>, string> = {
+  default: 'sm:max-w-lg',
+  wide: 'sm:max-w-3xl',
+  xl: 'sm:max-w-5xl lg:max-w-6xl',
+};
+
+export function Modal({ open, title, onClose, children, footer, size = 'default' }: ModalProps) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -35,7 +43,7 @@ export function Modal({ open, title, onClose, children, footer }: ModalProps) {
       <div
         role="dialog"
         aria-modal="true"
-        className="relative z-10 flex w-full min-w-0 sm:max-w-lg max-h-[92vh] sm:max-h-[85vh] flex-col rounded-t-2xl sm:rounded-2xl bg-white shadow-xl"
+        className={`relative z-10 flex w-full min-w-0 ${sizeClass[size]} max-h-[92vh] sm:max-h-[90vh] flex-col rounded-t-2xl sm:rounded-2xl bg-white shadow-xl`}
       >
         <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 sm:px-5">
           <h3 className="text-lg font-semibold text-gray-900 truncate">{title}</h3>

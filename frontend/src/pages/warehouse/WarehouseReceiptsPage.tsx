@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '../../api/client';
 import { clientsApi } from '../../api/clients';
@@ -11,12 +11,18 @@ import {
 } from '../../api/warehouseCommercial';
 import { Modal } from '../../components/ui/Modal';
 import {
-  calcMarkupPercent,
+  calcMarkupPercentFromSaleInc,
   calcReceiptTotals,
-  calcSaleFromMarkup,
+  calcSaleIncFromMarkup,
   paymentStatusLabel,
+  purchaseUnitIncVat,
   roundMoney,
 } from '../../utils/warehousePricing';
+import {
+  consumeReceiptProductPick,
+  productToReceiptLineFields,
+  RECEIPT_PRODUCT_PICK_MESSAGE,
+} from '../../utils/receiptProductPick';
 
 function flag(v: unknown) {
   return v === true || v === 1 || v === '1';
@@ -24,6 +30,62 @@ function flag(v: unknown) {
 
 function formatMoney(value: number) {
   return value.toLocaleString('lv-LV', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** Vērtība HTML date input laukam (YYYY-MM-DD) */
+function toDateInputValue(value: string | null | undefined): string {
+  if (!value) return '';
+  const s = String(value);
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (m) return m[1];
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return '';
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${mo}-${day}`;
+}
+
+function receiptHeaderFromReceipt(receipt: WarehouseReceipt) {
+  return {
+    supplier_document_number: receipt.supplier_document_number ?? '',
+    document_date: toDateInputValue(receipt.document_date),
+    operation_description: receipt.operation_description ?? '',
+    notes: receipt.notes ?? '',
+  };
+}
+
+function buildReceiptHeaderPayload(
+  header: ReturnType<typeof receiptHeaderFromReceipt>,
+  fallbackDate: string
+) {
+  const documentDate = toDateInputValue(header.document_date) || toDateInputValue(fallbackDate);
+  return {
+    supplier_document_number: header.supplier_document_number.trim() || undefined,
+    document_date: documentDate,
+    operation_description: header.operation_description.trim() || undefined,
+    notes: header.notes.trim() || undefined,
+  };
+}
+
+/** Datums sarakstam: 2026.06.14 */
+function formatReceiptDate(value: string): string {
+  const iso = toDateInputValue(value);
+  if (!iso) return '—';
+  return iso.replace(/-/g, '.');
+}
+
+function receiptDisplayNumber(r: {
+  supplier_document_number?: string | null;
+}): string {
+  return r.supplier_document_number?.trim() || '—';
+}
+
+function receiptModalTitle(r: {
+  supplier_document_number?: string | null;
+}): string {
+  const num = r.supplier_document_number?.trim();
+  return num ? `Pavadzīme ${num}` : 'Saņemšanas pavadzīme';
 }
 
 type LineDraft = {
@@ -55,6 +117,24 @@ function lineDraftFromReceipt(line: ReceiptLine): LineDraft {
   };
 }
 
+function mergeProductIntoLines(
+  lines: LineDraft[],
+  product: WarehouseProduct,
+  lineIdx?: number
+): LineDraft[] {
+  const fields = productToReceiptLineFields(product);
+  const next = [...lines];
+  const idx =
+    lineIdx != null && lineIdx >= 0 && lineIdx < next.length
+      ? lineIdx
+      : next.length > 0 && !next[next.length - 1].product_id
+        ? next.length - 1
+        : next.length;
+  if (idx >= next.length) next.push(emptyLine());
+  next[idx] = { ...next[idx], ...fields };
+  return next;
+}
+
 function receiptStatusLabel(s: WarehouseReceipt['status']) {
   if (s === 'posted') return 'Grāmatots';
   if (s === 'cancelled') return 'Atcelts';
@@ -63,6 +143,7 @@ function receiptStatusLabel(s: WarehouseReceipt['status']) {
 
 export function WarehouseReceiptsPage() {
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [createOpen, setCreateOpen] = useState(false);
   const [editorReceipt, setEditorReceipt] = useState<WarehouseReceipt | null>(null);
   const [viewReceipt, setViewReceipt] = useState<WarehouseReceipt | null>(null);
@@ -107,6 +188,24 @@ export function WarehouseReceiptsPage() {
       else setViewReceipt(r);
     }
   };
+
+  const openReceiptHandled = useRef<string | null>(null);
+
+  useEffect(() => {
+    const openId = searchParams.get('openReceipt');
+    if (!openId || openReceiptHandled.current === openId) return;
+    openReceiptHandled.current = openId;
+    warehouseCommercialApi
+      .getReceipt(openId)
+      .then((res) => {
+        if (res.data.status === 'draft') setEditorReceipt(res.data);
+        else setViewReceipt(res.data);
+      })
+      .catch(() => {});
+    const next = new URLSearchParams(searchParams);
+    next.delete('openReceipt');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   return (
     <div className="space-y-4">
@@ -190,9 +289,9 @@ export function WarehouseReceiptsPage() {
                   className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer"
                   onClick={() => openReceipt(r)}
                 >
-                  <td className="px-3 py-2 whitespace-nowrap">{r.document_date}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">{formatReceiptDate(r.document_date)}</td>
                   <td className="px-3 py-2">{r.supplier_name}</td>
-                  <td className="px-3 py-2 font-medium text-gray-900">{r.document_number}</td>
+                  <td className="px-3 py-2 font-medium text-gray-900">{receiptDisplayNumber(r)}</td>
                   <td className="px-3 py-2 text-right">
                     {formatMoney(Number(r.total_purchase_ex_vat ?? 0))}
                   </td>
@@ -322,6 +421,7 @@ function ReceiptHeaderModal({
   return (
     <Modal
       open
+      size="wide"
       title="Jauna saņemšanas pavadzīme — galva"
       onClose={onClose}
       footer={
@@ -389,10 +489,14 @@ function ReceiptHeaderModal({
 
 function ProductPickerModal({
   products,
+  receiptId,
+  lineIdx,
   onSelect,
   onClose,
 }: {
   products: WarehouseProduct[];
+  receiptId?: string;
+  lineIdx?: number;
   onSelect: (product: WarehouseProduct) => void;
   onClose: () => void;
 }) {
@@ -413,7 +517,7 @@ function ProductPickerModal({
   }, [products, search, mode]);
 
   return (
-    <Modal open title="Izvēlēties preci" onClose={onClose}>
+    <Modal open title="Izvēlēties preci" onClose={onClose} size="wide">
       <div className="space-y-3">
         <div className="flex gap-2 flex-wrap">
           <button
@@ -430,13 +534,25 @@ function ProductPickerModal({
           >
             Pēc artikula
           </button>
-          <Link
-            to="/warehouse/products"
-            target="_blank"
-            className="text-sm text-primary-600 font-medium px-2 py-1"
-          >
-            Atvērt preces un grupas ↗
-          </Link>
+          {receiptId ? (
+            <Link
+              to={`/warehouse/products?pickForReceipt=${receiptId}${lineIdx != null ? `&lineIdx=${lineIdx}` : ''}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-primary-600 font-medium px-2 py-1"
+            >
+              Atvērt preces un grupas ↗
+            </Link>
+          ) : (
+            <Link
+              to="/warehouse/products"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-primary-600 font-medium px-2 py-1"
+            >
+              Atvērt preces un grupas ↗
+            </Link>
+          )}
         </div>
         <input
           className="input-field"
@@ -469,10 +585,12 @@ function ProductPickerModal({
 function ReceiptLinesEditor({
   lines,
   products,
+  receiptId,
   onChange,
 }: {
   lines: LineDraft[];
   products: WarehouseProduct[];
+  receiptId: string;
   onChange: (lines: LineDraft[]) => void;
 }) {
   const [pickerForIdx, setPickerForIdx] = useState<number | null>(null);
@@ -482,20 +600,21 @@ function ReceiptLinesEditor({
   };
 
   const applyProduct = (idx: number, product: WarehouseProduct) => {
-    const purchase = product.purchase_price != null ? String(product.purchase_price) : '';
-    const sale = product.sale_price != null ? String(product.sale_price) : '';
-    const markup =
-      product.purchase_price != null && product.sale_price != null
-        ? String(calcMarkupPercent(Number(product.purchase_price), Number(product.sale_price)) ?? '')
-        : '';
-    updateLine(idx, {
-      product_id: product.id,
-      vat_rate: Number(product.vat_rate ?? 21),
-      purchase_price: purchase,
-      sale_price: sale,
-      markup_percent: markup,
-    });
+    onChange(mergeProductIntoLines(lines, product, idx));
     setPickerForIdx(null);
+  };
+
+  const onPurchaseChange = (idx: number, purchase: string) => {
+    const line = lines[idx];
+    const purchaseNum = Number(purchase);
+    const vat = line.vat_rate;
+    const next: Partial<LineDraft> = { purchase_price: purchase };
+    if (line.markup_percent && Number.isFinite(purchaseNum) && purchaseNum > 0) {
+      next.sale_price = String(
+        calcSaleIncFromMarkup(purchaseNum, Number(line.markup_percent), vat)
+      );
+    }
+    updateLine(idx, next);
   };
 
   const onMarkupChange = (idx: number, markup: string) => {
@@ -503,7 +622,7 @@ function ReceiptLinesEditor({
     const purchase = Number(line.purchase_price);
     const next: Partial<LineDraft> = { markup_percent: markup };
     if (markup && Number.isFinite(purchase) && purchase > 0) {
-      next.sale_price = String(calcSaleFromMarkup(purchase, Number(markup)));
+      next.sale_price = String(calcSaleIncFromMarkup(purchase, Number(markup), line.vat_rate));
     }
     updateLine(idx, next);
   };
@@ -514,7 +633,7 @@ function ReceiptLinesEditor({
     const saleNum = Number(sale);
     const next: Partial<LineDraft> = { sale_price: sale };
     if (Number.isFinite(purchase) && purchase > 0 && Number.isFinite(saleNum)) {
-      const markup = calcMarkupPercent(purchase, saleNum);
+      const markup = calcMarkupPercentFromSaleInc(purchase, saleNum, line.vat_rate);
       next.markup_percent = markup != null ? String(markup) : '';
     }
     updateLine(idx, next);
@@ -525,70 +644,104 @@ function ReceiptLinesEditor({
     .map((l) => ({
       quantity: Number(l.quantity),
       purchase_price_ex_vat: Number(l.purchase_price) || 0,
-      sale_price_ex_vat: Number(l.sale_price) || 0,
+      sale_price_inc_vat: Number(l.sale_price) || 0,
       vat_rate: l.vat_rate,
     }));
   const totals = calcReceiptTotals(pricingLines);
 
   return (
     <div className="space-y-3">
+      <p className="text-xs text-gray-500 hidden lg:block">
+        Pārdošanas cena = (iepirkums bez PVN + PVN) × (1 + piecenojums %). Piem., 1,00 € + 21 %
+        PVN = 1,21 €; +25 % → 1,51 €
+      </p>
+
+      {lines.length > 0 && (
+        <div className="hidden lg:grid lg:grid-cols-12 gap-2 text-xs font-medium text-gray-500 px-1">
+          <span className="col-span-4">Prece</span>
+          <span className="col-span-1">Daudz.</span>
+          <span className="col-span-2">Iepirkums bez PVN</span>
+          <span className="col-span-1">Piec. %</span>
+          <span className="col-span-2">Pārdošana ar PVN</span>
+          <span className="col-span-1">PVN</span>
+          <span className="col-span-1" />
+        </div>
+      )}
+
       {lines.map((line, idx) => {
         const product = products.find((p) => p.id === line.product_id);
+        const purchaseNum = Number(line.purchase_price);
+        const purchaseIncHint =
+          Number.isFinite(purchaseNum) && purchaseNum > 0
+            ? purchaseUnitIncVat(purchaseNum, line.vat_rate)
+            : null;
         return (
-          <div key={idx} className="rounded-xl border border-gray-100 p-3 space-y-2">
-            <div className="flex gap-2 flex-wrap items-center">
-              <button
-                type="button"
-                className="btn-secondary !py-1.5 !px-3 !min-h-0 text-sm flex-1 text-left"
-                onClick={() => setPickerForIdx(idx)}
-              >
-                {product ? `${product.name}${product.sku ? ` (${product.sku})` : ''}` : 'Izvēlēties preci'}
-              </button>
-              <button
-                type="button"
-                className="text-sm text-primary-600 font-medium"
-                onClick={() => onChange(lines.filter((_, i) => i !== idx))}
-              >
-                Noņemt
-              </button>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+          <div key={idx} className="rounded-xl border border-gray-100 p-3 lg:p-2 space-y-2 lg:space-y-0">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-2 items-start lg:items-center">
+              <div className="lg:col-span-4 flex gap-2">
+                <button
+                  type="button"
+                  className="btn-secondary !py-1.5 !px-3 !min-h-0 text-sm flex-1 text-left truncate"
+                  onClick={() => setPickerForIdx(idx)}
+                >
+                  {product ? `${product.name}${product.sku ? ` (${product.sku})` : ''}` : 'Izvēlēties preci'}
+                </button>
+                <button
+                  type="button"
+                  className="text-sm text-primary-600 font-medium lg:hidden shrink-0"
+                  onClick={() => onChange(lines.filter((_, i) => i !== idx))}
+                >
+                  Noņemt
+                </button>
+              </div>
               <input
-                className="input-field"
+                className="input-field lg:col-span-1"
                 type="number"
                 min="0"
                 step="0.001"
-                placeholder="Daudzums"
+                placeholder="Daudz."
                 value={line.quantity}
                 onChange={(e) => updateLine(idx, { quantity: e.target.value })}
               />
+              <div className="lg:col-span-2 space-y-0.5">
+                <input
+                  className="input-field"
+                  type="number"
+                  step="0.01"
+                  placeholder="Iepirkums bez PVN"
+                  value={line.purchase_price}
+                  onChange={(e) => onPurchaseChange(idx, e.target.value)}
+                />
+                {purchaseIncHint != null && (
+                  <p className="text-[10px] text-gray-400 lg:px-1">ar PVN: {formatMoney(purchaseIncHint)}</p>
+                )}
+              </div>
               <input
-                className="input-field"
+                className="input-field lg:col-span-1"
                 type="number"
                 step="0.01"
-                placeholder="Iepirkums bez PVN"
-                value={line.purchase_price}
-                onChange={(e) => updateLine(idx, { purchase_price: e.target.value })}
-              />
-              <input
-                className="input-field"
-                type="number"
-                step="0.01"
-                placeholder="Piecenojums %"
+                placeholder="Piec. %"
                 value={line.markup_percent}
                 onChange={(e) => onMarkupChange(idx, e.target.value)}
               />
               <input
-                className="input-field"
+                className="input-field lg:col-span-2"
                 type="number"
                 step="0.01"
-                placeholder="Pārdošana bez PVN"
+                placeholder="Pārdošana ar PVN"
                 value={line.sale_price}
                 onChange={(e) => onSaleChange(idx, e.target.value)}
               />
-              <div className="input-field bg-gray-50 text-gray-600 flex items-center text-sm">
-                PVN {line.vat_rate}%
+              <div className="input-field bg-gray-50 text-gray-600 flex items-center text-sm lg:col-span-1">
+                {line.vat_rate}%
               </div>
+              <button
+                type="button"
+                className="hidden lg:block text-sm text-primary-600 font-medium lg:col-span-1 text-right"
+                onClick={() => onChange(lines.filter((_, i) => i !== idx))}
+              >
+                Noņemt
+              </button>
             </div>
           </div>
         );
@@ -626,6 +779,8 @@ function ReceiptLinesEditor({
       {pickerForIdx != null && (
         <ProductPickerModal
           products={products}
+          receiptId={receiptId}
+          lineIdx={pickerForIdx}
           onClose={() => setPickerForIdx(null)}
           onSelect={(p) => applyProduct(pickerForIdx, p)}
         />
@@ -645,12 +800,7 @@ function ReceiptEditorModal({
   onUpdated: (r: WarehouseReceipt) => void;
   onPosted: (r: WarehouseReceipt) => void;
 }) {
-  const [header, setHeader] = useState({
-    supplier_document_number: receipt.supplier_document_number ?? '',
-    document_date: receipt.document_date,
-    operation_description: receipt.operation_description ?? '',
-    notes: receipt.notes ?? '',
-  });
+  const [header, setHeader] = useState(() => receiptHeaderFromReceipt(receipt));
   const [lines, setLines] = useState<LineDraft[]>(
     receipt.lines?.length ? receipt.lines.map(lineDraftFromReceipt) : [emptyLine()]
   );
@@ -658,11 +808,36 @@ function ReceiptEditorModal({
   const [saving, setSaving] = useState(false);
   const [posting, setPosting] = useState(false);
 
+  useEffect(() => {
+    setHeader(receiptHeaderFromReceipt(receipt));
+    setLines(receipt.lines?.length ? receipt.lines.map(lineDraftFromReceipt) : [emptyLine()]);
+  }, [receipt.id, receipt.updated_at, receipt.document_date]);
+
   const { data: productsData } = useQuery({
     queryKey: ['warehouse-products-all'],
     queryFn: () => warehouseCommercialApi.listProducts(),
   });
   const products = productsData?.data ?? [];
+
+  useEffect(() => {
+    const pending = consumeReceiptProductPick(receipt.id);
+    if (pending?.product) {
+      setLines((prev) => mergeProductIntoLines(prev, pending.product, pending.lineIdx));
+    }
+
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type !== RECEIPT_PRODUCT_PICK_MESSAGE) return;
+      if (event.data.receiptId !== receipt.id) return;
+      const product = event.data.product as WarehouseProduct;
+      const lineIdx =
+        typeof event.data.lineIdx === 'number' ? event.data.lineIdx : undefined;
+      setLines((prev) => mergeProductIntoLines(prev, product, lineIdx));
+    };
+
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [receipt.id]);
 
   const buildValidLines = () =>
     lines
@@ -684,12 +859,10 @@ function ReceiptEditorModal({
     setSaving(true);
     setError('');
     try {
-      await warehouseCommercialApi.updateReceipt(receipt.id, {
-        supplier_document_number: header.supplier_document_number.trim() || undefined,
-        document_date: header.document_date,
-        operation_description: header.operation_description.trim() || undefined,
-        notes: header.notes.trim() || undefined,
-      });
+      await warehouseCommercialApi.updateReceipt(
+        receipt.id,
+        buildReceiptHeaderPayload(header, receipt.document_date)
+      );
       const res = await warehouseCommercialApi.updateReceiptLines(receipt.id, validLines);
       onUpdated(res.data);
     } catch (e) {
@@ -708,12 +881,12 @@ function ReceiptEditorModal({
         setError('Pievienojiet vismaz vienu preci');
         return;
       }
-      await warehouseCommercialApi.updateReceipt(receipt.id, {
-        supplier_document_number: header.supplier_document_number.trim() || undefined,
-        document_date: header.document_date,
-        operation_description: header.operation_description.trim() || undefined,
-        notes: header.notes.trim() || undefined,
-      });
+      const headerPayload = buildReceiptHeaderPayload(header, receipt.document_date);
+      if (!headerPayload.document_date) {
+        setError('Pavadzīmes datums ir obligāts');
+        return;
+      }
+      await warehouseCommercialApi.updateReceipt(receipt.id, headerPayload);
       await warehouseCommercialApi.updateReceiptLines(receipt.id, validLines);
       const res = await warehouseCommercialApi.postReceipt(receipt.id);
       onPosted(res.data);
@@ -727,7 +900,8 @@ function ReceiptEditorModal({
   return (
     <Modal
       open
-      title={`Pavadzīme ${receipt.document_number}`}
+      size="xl"
+      title={receiptModalTitle(receipt)}
       onClose={onClose}
       footer={
         <>
@@ -749,6 +923,7 @@ function ReceiptEditorModal({
           <p>
             <span className="text-gray-500">Piegādātājs:</span> {receipt.supplier_name}
           </p>
+          <p className="text-xs text-gray-400">Sistēmas nr.: {receipt.document_number}</p>
           <input
             className="input-field"
             placeholder="Piegādātāja rēķina / pavadzīmes nr."
@@ -774,7 +949,12 @@ function ReceiptEditorModal({
             onChange={(e) => setHeader((h) => ({ ...h, notes: e.target.value }))}
           />
         </div>
-        <ReceiptLinesEditor lines={lines} products={products} onChange={setLines} />
+        <ReceiptLinesEditor
+          lines={lines}
+          products={products}
+          receiptId={receipt.id}
+          onChange={setLines}
+        />
       </div>
     </Modal>
   );
@@ -832,7 +1012,8 @@ function ReceiptViewModal({
   return (
     <Modal
       open
-      title={`Pavadzīme ${receipt.document_number}`}
+      size="xl"
+      title={receiptModalTitle(receipt)}
       onClose={onClose}
       footer={
         <>
@@ -855,7 +1036,7 @@ function ReceiptViewModal({
       <div className="space-y-4 text-sm">
         <div className="grid grid-cols-2 gap-2 text-sm">
           <p>
-            <span className="text-gray-500">Datums:</span> {receipt.document_date}
+            <span className="text-gray-500">Datums:</span> {formatReceiptDate(receipt.document_date)}
           </p>
           <p>
             <span className="text-gray-500">Statuss:</span> {receiptStatusLabel(receipt.status)}
@@ -863,6 +1044,12 @@ function ReceiptViewModal({
           <p className="col-span-2">
             <span className="text-gray-500">Piegādātājs:</span> {receipt.supplier_name}
           </p>
+          {receipt.supplier_document_number && (
+            <p className="col-span-2">
+              <span className="text-gray-500">Pavadzīmes nr.:</span> {receipt.supplier_document_number}
+            </p>
+          )}
+          <p className="col-span-2 text-xs text-gray-400">Sistēmas nr.: {receipt.document_number}</p>
         </div>
 
         <div className="overflow-x-auto">

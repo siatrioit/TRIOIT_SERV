@@ -2,22 +2,26 @@ export function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+export function purchaseUnitIncVat(purchaseExVat: number, vatRate: number): number {
+  return roundMoney(purchaseExVat * (1 + vatRate / 100));
+}
+
 export type ReceiptLinePricing = {
   quantity: number;
   purchase_price_ex_vat: number;
-  sale_price_ex_vat: number;
+  sale_price_inc_vat: number;
   vat_rate: number;
 };
 
 export function calcReceiptLineTotals(line: ReceiptLinePricing) {
   const qty = Number(line.quantity) || 0;
   const purchase = Number(line.purchase_price_ex_vat) || 0;
-  const sale = Number(line.sale_price_ex_vat) || 0;
+  const saleIncUnit = Number(line.sale_price_inc_vat) || 0;
   const vatRate = Number(line.vat_rate) || 21;
   const purchaseEx = roundMoney(qty * purchase);
   const vatAmount = roundMoney(purchaseEx * (vatRate / 100));
   const purchaseInc = roundMoney(purchaseEx + vatAmount);
-  const saleInc = roundMoney(qty * sale * (1 + vatRate / 100));
+  const saleInc = roundMoney(qty * saleIncUnit);
   return { purchaseEx, vatAmount, purchaseInc, saleInc };
 }
 

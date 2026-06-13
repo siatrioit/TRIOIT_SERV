@@ -536,11 +536,29 @@ async function loadReceiptLines(receiptId: string): Promise<WarehouseReceiptLine
   );
 }
 
+function normalizeDocumentDate(value: unknown): string {
+  if (value == null || value === '') return '';
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, '0');
+    const d = String(value.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  const s = String(value);
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : '';
+}
+
+function normalizeReceipt(receipt: WarehouseReceipt): WarehouseReceipt {
+  receipt.document_date = normalizeDocumentDate(receipt.document_date);
+  return receipt;
+}
+
 function enrichReceiptTotals(receipt: WarehouseReceipt): WarehouseReceipt {
   const pricingLines = (receipt.lines ?? []).map((line) => ({
     quantity: Number(line.quantity),
     purchase_price_ex_vat: Number(line.unit_price ?? 0),
-    sale_price_ex_vat: Number(line.sale_price ?? 0),
+    sale_price_inc_vat: Number(line.sale_price ?? 0),
     vat_rate: Number(line.product_vat_rate ?? 21),
   }));
   const totals = calcReceiptTotals(pricingLines);
@@ -584,6 +602,7 @@ export async function listReceipts(opts?: ListReceiptsOptions): Promise<Warehous
   const rows = await query<WarehouseReceipt>(sql, params);
   const enriched = await Promise.all(
     rows.map(async (row) => {
+      normalizeReceipt(row);
       row.lines = await loadReceiptLines(row.id);
       return enrichReceiptTotals(row);
     })
@@ -597,6 +616,7 @@ export async function listReceipts(opts?: ListReceiptsOptions): Promise<Warehous
 export async function getReceipt(id: string): Promise<WarehouseReceipt | null> {
   const row = await queryOne<WarehouseReceipt>(`${RECEIPT_SELECT} WHERE r.id = ?`, [id]);
   if (!row) return null;
+  normalizeReceipt(row);
   row.lines = await loadReceiptLines(id);
   return enrichReceiptTotals(row);
 }
@@ -658,8 +678,12 @@ export async function updateReceipt(
     values.push(input.supplier_document_number?.trim() || null);
   }
   if (input.document_date !== undefined) {
+    const normalized = normalizeDocumentDate(input.document_date);
+    if (!normalized) {
+      throw new AppError(400, 'Pavadzīmes datums ir obligāts', 'INVALID_DATE');
+    }
     fields.push('document_date = ?');
-    values.push(input.document_date);
+    values.push(normalized);
   }
   if (input.operation_description !== undefined) {
     fields.push('operation_description = ?');

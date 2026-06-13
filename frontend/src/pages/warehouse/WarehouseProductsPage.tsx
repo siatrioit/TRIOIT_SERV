@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import {
   isProductService,
@@ -8,6 +9,10 @@ import {
   type WarehouseProductGroup,
 } from '../../api/warehouseCommercial';
 import { calcProductMarkup } from '../../utils/warehousePricing';
+import {
+  postReceiptProductPick,
+  storeReceiptProductPick,
+} from '../../utils/receiptProductPick';
 import { Modal } from '../../components/ui/Modal';
 import { WarehouseProductJournalCollapsible } from '../../components/warehouse/WarehouseProductJournalPanel';
 
@@ -47,6 +52,12 @@ function selectionToDefaultGroup(
 
 export function WarehouseProductsPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const pickForReceipt = searchParams.get('pickForReceipt');
+  const pickLineIdxRaw = searchParams.get('lineIdx');
+  const pickLineIdx =
+    pickLineIdxRaw != null && pickLineIdxRaw !== '' ? Number(pickLineIdxRaw) : undefined;
   const [search, setSearch] = useState('');
   const [selection, setSelection] = useState<GroupSelection>({ kind: 'all' });
   const [productModal, setProductModal] = useState<{
@@ -137,8 +148,27 @@ export function WarehouseProductsPage() {
     });
   };
 
+  const handlePickForReceipt = (product: WarehouseProduct) => {
+    if (!pickForReceipt) return;
+    const lineIdx = Number.isFinite(pickLineIdx) ? pickLineIdx : undefined;
+    if (postReceiptProductPick(pickForReceipt, lineIdx, product)) return;
+    storeReceiptProductPick({ receiptId: pickForReceipt, lineIdx, product });
+    navigate(`/warehouse/receipts?openReceipt=${pickForReceipt}`);
+  };
+
   return (
     <div className="space-y-6">
+      {pickForReceipt && (
+        <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm">
+          <p className="font-medium text-primary-900">Izvēlieties preci saņemšanas pavadzīmei</p>
+          <p className="text-primary-800/80 mt-0.5 text-xs">
+            Nospiediet „Pievienot pavadzīmē” pie vajadzīgās preces. Logs aizvērsies automātiski.
+          </p>
+        </div>
+      )}
+
+      <WarehouseProductJournalCollapsible />
+
       <section className="card space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="font-medium text-gray-800">Preču grupas</h3>
@@ -396,7 +426,9 @@ export function WarehouseProductsPage() {
                   type="button"
                   className="text-left flex-1"
                   onClick={() =>
-                    setProductModal({ open: true, initial: p, defaultGroup: undefined })
+                    pickForReceipt
+                      ? handlePickForReceipt(p)
+                      : setProductModal({ open: true, initial: p, defaultGroup: undefined })
                   }
                 >
                   <p className="font-medium text-gray-900 flex flex-wrap items-center gap-2">
@@ -413,13 +445,20 @@ export function WarehouseProductsPage() {
                     {isProductService(p) ? '' : ` · Atlikums: ${p.quantity_on_hand} ${p.unit}`}
                   </p>
                 </button>
+                {pickForReceipt && (
+                  <button
+                    type="button"
+                    className="btn-primary !py-2 !px-3 !min-h-0 text-xs shrink-0"
+                    onClick={() => handlePickForReceipt(p)}
+                  >
+                    Pievienot pavadzīmē
+                  </button>
+                )}
               </li>
             ))}
           </ul>
         )}
       </section>
-
-      <WarehouseProductJournalCollapsible />
 
       {productModal.open && (
         <ProductModal
@@ -475,7 +514,8 @@ function ProductModal({
 
   const markupPercent = calcProductMarkup(
     purchasePrice ? Number(purchasePrice) : null,
-    salePrice ? Number(salePrice) : null
+    salePrice ? Number(salePrice) : null,
+    vatRate ? Number(vatRate) : 21
   );
 
   const mains = mainGroups(groups);
@@ -608,11 +648,12 @@ function ProductModal({
         />
         <div className="input-field bg-gray-50 text-gray-600 flex items-center text-sm">
           Piecenojums: {markupPercent != null ? `${markupPercent}%` : '—'}
+          <span className="text-[10px] text-gray-400 ml-1">(pēc PVN)</span>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <input
             className="input-field"
-            placeholder="Pārdošanas cena"
+            placeholder="Pārdošanas cena ar PVN"
             type="number"
             step="0.01"
             value={salePrice}
