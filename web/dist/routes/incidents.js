@@ -51,42 +51,57 @@ exports.incidentsRouter.get('/', async (req, res, next) => {
         const assignedTo = req.query.assigned_to;
         let where = 'WHERE 1=1';
         const params = [];
-        let join = '';
         if (city) {
-            join = ' JOIN clients c ON incidents.client_id = c.id';
             where += ' AND c.city = ?';
             params.push(city);
         }
         if (status === 'open') {
-            where += " AND incidents.status IN ('pending', 'in_progress', 'paused')";
+            where += " AND i.status IN ('pending', 'in_progress', 'paused')";
         }
         else if (status === 'closed') {
-            where += " AND incidents.status IN ('completed', 'cancelled')";
+            where += " AND i.status IN ('completed', 'cancelled')";
         }
         else if (status) {
-            where += ' AND incidents.status = ?';
+            where += ' AND i.status = ?';
             params.push(status);
         }
         if (priority) {
-            where += ' AND incidents.priority = ?';
+            where += ' AND i.priority = ?';
             params.push(priority);
         }
         if (assignedTo) {
-            where += ' AND incidents.assigned_to = ?';
+            where += ' AND i.assigned_to = ?';
             params.push(assignedTo);
         }
-        const countRow = await (0, pool_1.queryOne)(`SELECT COUNT(*) as total FROM incidents${join} ${where}`, params);
+        const fromClause = `
+      FROM incidents i
+      JOIN clients c ON c.id = i.client_id
+      LEFT JOIN client_objects co ON co.id = i.object_id
+      LEFT JOIN users au ON au.id = i.assigned_to
+      LEFT JOIN units u ON u.id = i.unit_id
+      LEFT JOIN asset_types at ON at.id = u.asset_type_id
+      LEFT JOIN asset_type_components ac ON ac.id = i.asset_component_id`;
+        const countRow = await (0, pool_1.queryOne)(`SELECT COUNT(*) as total ${fromClause} ${where}`, params);
         const staffUserId = req.user.userId;
-        const incidents = await (0, pool_1.query)(`SELECT incidents.*,
+        const incidents = await (0, pool_1.query)(`SELECT i.*,
+              c.name AS client_name,
+              co.name AS object_name,
+              au.full_name AS assigned_user_name,
+              u.serial_number AS unit_serial,
+              u.unit_type,
+              u.model AS unit_model,
+              at.name AS asset_type_name,
+              ac.name AS asset_component_name,
         (SELECT COUNT(*) FROM incident_messages m
-         WHERE m.incident_id = incidents.id AND m.author_type = 'portal'
+         WHERE m.incident_id = i.id AND m.author_type = 'portal'
          AND m.created_at > COALESCE(
            (SELECT r.last_read_at FROM incident_message_reads r
-            WHERE r.incident_id = incidents.id AND r.reader_type = 'staff' AND r.reader_id = ?),
+            WHERE r.incident_id = i.id AND r.reader_type = 'staff' AND r.reader_id = ?),
            '1970-01-01 00:00:00'
          )) AS unread_count
-       FROM incidents${join} ${where}
-       ORDER BY incidents.received_at DESC LIMIT ? OFFSET ?`, [...params, staffUserId, limit, offset]);
+       ${fromClause}
+       ${where}
+       ORDER BY i.received_at DESC LIMIT ? OFFSET ?`, [...params, staffUserId, limit, offset]);
         res.json({
             data: incidents,
             pagination: (0, pagination_1.buildPaginationMeta)(countRow?.total ?? 0, page, limit),
