@@ -31,6 +31,7 @@ export type WarehouseProduct = {
     min_quantity?: number | null;
     purchase_price?: number | null;
     sale_price?: number | null;
+    desired_markup_percent?: number | null;
     vat_rate?: number | null;
     is_service?: number | boolean;
     is_active: number | boolean;
@@ -119,6 +120,7 @@ export type WarehouseProductMovement = {
     reference_type?: string | null;
     reference_id?: string | null;
     reference_number?: string | null;
+    reference_status?: string | null;
     notes?: string | null;
     created_by_name?: string | null;
     created_at: string;

@@ -23,6 +23,7 @@ export declare const productInputSchema: z.ZodObject<{
     vat_rate: z.ZodOptional<z.ZodNumber>;
     purchase_price: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
     sale_price: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
+    desired_markup_percent: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
     is_service: z.ZodOptional<z.ZodBoolean>;
 }, "strip", z.ZodTypeAny, {
     name: string;
@@ -35,6 +36,7 @@ export declare const productInputSchema: z.ZodObject<{
     vat_rate?: number | undefined;
     purchase_price?: number | null | undefined;
     sale_price?: number | null | undefined;
+    desired_markup_percent?: number | null | undefined;
     is_service?: boolean | undefined;
 }, {
     name: string;
@@ -47,6 +49,7 @@ export declare const productInputSchema: z.ZodObject<{
     vat_rate?: number | undefined;
     purchase_price?: number | null | undefined;
     sale_price?: number | null | undefined;
+    desired_markup_percent?: number | null | undefined;
     is_service?: boolean | undefined;
 }>;
 export declare const receiptHeaderInputSchema: z.ZodObject<{

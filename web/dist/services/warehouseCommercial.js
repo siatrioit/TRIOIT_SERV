@@ -30,26 +30,12 @@ function docNumber(prefix) {
     const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
     return `${prefix}-${date}-${rand}`;
 }
-async function applyProductStockChange(conn, productId, delta, movementType, opts) {
+async function changeProductStockOnHand(conn, productId, delta) {
     const row = await (0, pool_1.queryOneConn)(conn, 'SELECT quantity_on_hand, is_service FROM warehouse_products WHERE id = ? AND is_active = 1 FOR UPDATE', [productId]);
     if (!row)
         throw new errorHandler_1.AppError(404, 'Prece nav atrasta', 'NOT_FOUND');
     if (Number(row.is_service)) {
-        await (0, pool_1.queryConn)(conn, `INSERT INTO warehouse_product_movements (
-        id, product_id, movement_type, quantity, quantity_after,
-        reference_type, reference_id, notes, created_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
-            (0, uuid_1.v4)(),
-            productId,
-            movementType,
-            Math.abs(delta),
-            0,
-            opts.referenceType ?? null,
-            opts.referenceId ?? null,
-            opts.notes ?? null,
-            opts.createdBy ?? null,
-        ]);
-        return 0;
+        return { after: 0, isService: true };
     }
     const after = Number(row.quantity_on_hand) + delta;
     if (after < 0) {
@@ -59,6 +45,10 @@ async function applyProductStockChange(conn, productId, delta, movementType, opt
         after,
         productId,
     ]);
+    return { after, isService: false };
+}
+async function applyProductStockChange(conn, productId, delta, movementType, opts) {
+    const { after, isService } = await changeProductStockOnHand(conn, productId, delta);
     await (0, pool_1.queryConn)(conn, `INSERT INTO warehouse_product_movements (
       id, product_id, movement_type, quantity, quantity_after,
       reference_type, reference_id, notes, created_by
@@ -67,13 +57,17 @@ async function applyProductStockChange(conn, productId, delta, movementType, opt
         productId,
         movementType,
         Math.abs(delta),
-        after,
+        isService ? 0 : after,
         opts.referenceType ?? null,
         opts.referenceId ?? null,
         opts.notes ?? null,
         opts.createdBy ?? null,
     ]);
     return after;
+}
+async function deleteReceiptMovements(conn, receiptId) {
+    await (0, pool_1.queryConn)(conn, `DELETE FROM warehouse_product_movements
+     WHERE reference_type = 'receipt' AND reference_id = ?`, [receiptId]);
 }
 async function assertSupplier(clientId) {
     const row = await (0, pool_1.queryOne)('SELECT id FROM clients WHERE id = ? AND is_active = 1 AND is_supplier = 1', [clientId]);
@@ -199,8 +193,8 @@ async function createProduct(input, createdBy) {
     const id = (0, uuid_1.v4)();
     await (0, pool_1.query)(`INSERT INTO warehouse_products (
       id, group_id, sku, name, secondary_name, description, unit, min_quantity,
-      purchase_price, sale_price, vat_rate, is_service, created_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+      purchase_price, sale_price, desired_markup_percent, vat_rate, is_service, created_by
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
         id,
         input.group_id ?? null,
         input.sku ?? null,
@@ -211,6 +205,7 @@ async function createProduct(input, createdBy) {
         input.min_quantity ?? null,
         input.purchase_price ?? null,
         input.sale_price ?? null,
+        input.desired_markup_percent ?? null,
         input.vat_rate ?? 21,
         input.is_service ? 1 : 0,
         createdBy ?? null,
@@ -246,6 +241,7 @@ async function updateProduct(id, input) {
         'min_quantity',
         'purchase_price',
         'sale_price',
+        'desired_markup_percent',
         'vat_rate',
         'is_service',
     ]) {
@@ -303,7 +299,16 @@ async function listProductMovements(opts) {
                 SELECT document_number FROM warehouse_issues WHERE id = m.reference_id LIMIT 1
               )
               ELSE NULL
-            END AS reference_number
+            END AS reference_number,
+            CASE
+              WHEN m.reference_type = 'receipt' THEN (
+                SELECT status FROM warehouse_receipts WHERE id = m.reference_id LIMIT 1
+              )
+              WHEN m.reference_type = 'issue' THEN (
+                SELECT status FROM warehouse_issues WHERE id = m.reference_id LIMIT 1
+              )
+              ELSE NULL
+            END AS reference_status
      FROM warehouse_product_movements m
      JOIN warehouse_products p ON p.id = m.product_id
      LEFT JOIN users u ON u.id = m.created_by
@@ -531,13 +536,9 @@ async function unpostReceipt(id, createdBy) {
     }
     await (0, pool_1.withMysqlTransaction)(async (conn) => {
         for (const line of receipt.lines) {
-            await applyProductStockChange(conn, line.product_id, -line.quantity, 'out', {
-                referenceType: 'receipt',
-                referenceId: id,
-                notes: `Atcelta saņemšana ${receipt.document_number}`,
-                createdBy,
-            });
+            await changeProductStockOnHand(conn, line.product_id, -line.quantity);
         }
+        await deleteReceiptMovements(conn, id);
         await (0, pool_1.queryConn)(conn, `UPDATE warehouse_receipts SET status = 'draft', posted_at = NULL WHERE id = ?`, [id]);
     });
     return (await getReceipt(id));

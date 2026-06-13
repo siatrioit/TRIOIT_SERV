@@ -19,6 +19,7 @@ exports.productInputSchema = zod_1.z.object({
     vat_rate: zod_1.z.number().min(0).max(100).optional(),
     purchase_price: zod_1.z.number().nonnegative().nullable().optional(),
     sale_price: zod_1.z.number().nonnegative().nullable().optional(),
+    desired_markup_percent: zod_1.z.number().nullable().optional(),
     is_service: zod_1.z.coerce.boolean().optional(),
 });
 const issueLineSchema = zod_1.z.object({
