@@ -80,6 +80,22 @@ exports.warehouseCommercialRouter.delete('/products/:id', canEdit, async (req, r
         next(err);
     }
 });
+exports.warehouseCommercialRouter.get('/journal/movements', async (req, res, next) => {
+    try {
+        const productId = req.query.product_id;
+        const limitRaw = req.query.limit;
+        const limit = limitRaw ? Number(limitRaw) : undefined;
+        res.json({
+            data: await (0, warehouseCommercial_1.listProductMovements)({
+                productId,
+                limit: Number.isFinite(limit) ? limit : undefined,
+            }),
+        });
+    }
+    catch (err) {
+        next(err);
+    }
+});
 exports.warehouseCommercialRouter.get('/receipts', async (_req, res, next) => {
     try {
         res.json({ data: await (0, warehouseCommercial_1.listReceipts)() });

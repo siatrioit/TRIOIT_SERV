@@ -7,6 +7,8 @@ type IssueInput = z.infer<typeof issueInputSchema>;
 export type WarehouseProductGroup = {
     id: string;
     name: string;
+    parent_id?: string | null;
+    parent_name?: string | null;
     sort_order: number;
     is_active: number | boolean;
     created_at: string;
@@ -17,6 +19,8 @@ export type WarehouseProduct = {
     id: string;
     group_id?: string | null;
     group_name?: string | null;
+    subgroup_name?: string | null;
+    group_path?: string | null;
     sku?: string | null;
     name: string;
     description?: string | null;
@@ -25,6 +29,7 @@ export type WarehouseProduct = {
     min_quantity?: number | null;
     purchase_price?: number | null;
     sale_price?: number | null;
+    is_service?: number | boolean;
     is_active: number | boolean;
     created_at: string;
     updated_at: string;
@@ -34,8 +39,13 @@ export type WarehouseReceipt = {
     document_number: string;
     supplier_id: string;
     supplier_name?: string;
+    supplier_registration_number?: string | null;
+    supplier_vat_number?: string | null;
+    supplier_address?: string | null;
+    supplier_document_number?: string | null;
     document_date: string;
     status: 'draft' | 'posted' | 'cancelled';
+    operation_description?: string | null;
     notes?: string | null;
     posted_at?: string | null;
     created_at: string;
@@ -48,6 +58,7 @@ export type WarehouseReceiptLine = {
     product_id: string;
     product_name?: string;
     product_sku?: string | null;
+    product_unit?: string | null;
     quantity: number;
     unit_price?: number | null;
     sort_order: number;
@@ -57,8 +68,14 @@ export type WarehouseIssue = {
     document_number: string;
     buyer_id: string;
     buyer_name?: string;
+    buyer_registration_number?: string | null;
+    buyer_vat_number?: string | null;
+    buyer_address?: string | null;
+    buyer_document_number?: string | null;
     document_date: string;
     status: 'draft' | 'posted' | 'cancelled';
+    operation_description?: string | null;
+    delivery_address?: string | null;
     notes?: string | null;
     posted_at?: string | null;
     created_at: string;
@@ -71,9 +88,26 @@ export type WarehouseIssueLine = {
     product_id: string;
     product_name?: string;
     product_sku?: string | null;
+    product_unit?: string | null;
     quantity: number;
     unit_price?: number | null;
     sort_order: number;
+};
+export type WarehouseProductMovement = {
+    id: string;
+    product_id: string;
+    product_name?: string;
+    product_unit?: string | null;
+    is_service?: number | boolean;
+    movement_type: 'in' | 'out' | 'adjust';
+    quantity: number;
+    quantity_after: number;
+    reference_type?: string | null;
+    reference_id?: string | null;
+    reference_number?: string | null;
+    notes?: string | null;
+    created_by_name?: string | null;
+    created_at: string;
 };
 export declare function listProductGroups(): Promise<WarehouseProductGroup[]>;
 export declare function createProductGroup(input: GroupInput): Promise<WarehouseProductGroup>;
@@ -83,6 +117,10 @@ export declare function listProducts(search?: string, groupId?: string): Promise
 export declare function createProduct(input: ProductInput, createdBy?: string): Promise<WarehouseProduct>;
 export declare function updateProduct(id: string, input: Partial<ProductInput>): Promise<WarehouseProduct>;
 export declare function deleteProduct(id: string): Promise<void>;
+export declare function listProductMovements(opts?: {
+    productId?: string;
+    limit?: number;
+}): Promise<WarehouseProductMovement[]>;
 export declare function listReceipts(): Promise<WarehouseReceipt[]>;
 export declare function getReceipt(id: string): Promise<WarehouseReceipt | null>;
 export declare function createReceipt(input: ReceiptInput, createdBy?: string): Promise<WarehouseReceipt>;

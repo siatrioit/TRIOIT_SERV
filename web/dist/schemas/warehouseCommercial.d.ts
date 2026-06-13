@@ -1,13 +1,16 @@
 import { z } from 'zod';
 export declare const productGroupInputSchema: z.ZodObject<{
     name: z.ZodString;
+    parent_id: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     sort_order: z.ZodOptional<z.ZodNumber>;
 }, "strip", z.ZodTypeAny, {
     name: string;
     sort_order?: number | undefined;
+    parent_id?: string | null | undefined;
 }, {
     name: string;
     sort_order?: number | undefined;
+    parent_id?: string | null | undefined;
 }>;
 export declare const productInputSchema: z.ZodObject<{
     group_id: z.ZodOptional<z.ZodNullable<z.ZodString>>;
@@ -18,6 +21,7 @@ export declare const productInputSchema: z.ZodObject<{
     min_quantity: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
     purchase_price: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
     sale_price: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
+    is_service: z.ZodOptional<z.ZodBoolean>;
 }, "strip", z.ZodTypeAny, {
     name: string;
     unit: string;
@@ -27,6 +31,7 @@ export declare const productInputSchema: z.ZodObject<{
     group_id?: string | null | undefined;
     purchase_price?: number | null | undefined;
     sale_price?: number | null | undefined;
+    is_service?: boolean | undefined;
 }, {
     name: string;
     sku?: unknown;
@@ -36,10 +41,13 @@ export declare const productInputSchema: z.ZodObject<{
     group_id?: string | null | undefined;
     purchase_price?: number | null | undefined;
     sale_price?: number | null | undefined;
+    is_service?: boolean | undefined;
 }>;
 export declare const receiptInputSchema: z.ZodObject<{
     supplier_id: z.ZodString;
+    supplier_document_number: z.ZodEffects<z.ZodOptional<z.ZodString>, string | undefined, unknown>;
     document_date: z.ZodString;
+    operation_description: z.ZodEffects<z.ZodOptional<z.ZodString>, string | undefined, unknown>;
     notes: z.ZodEffects<z.ZodOptional<z.ZodString>, string | undefined, unknown>;
     lines: z.ZodArray<z.ZodObject<{
         product_id: z.ZodString;
@@ -63,6 +71,8 @@ export declare const receiptInputSchema: z.ZodObject<{
         unit_price?: number | null | undefined;
     }[];
     notes?: string | undefined;
+    supplier_document_number?: string | undefined;
+    operation_description?: string | undefined;
 }, {
     supplier_id: string;
     document_date: string;
@@ -72,10 +82,15 @@ export declare const receiptInputSchema: z.ZodObject<{
         unit_price?: number | null | undefined;
     }[];
     notes?: unknown;
+    supplier_document_number?: unknown;
+    operation_description?: unknown;
 }>;
 export declare const issueInputSchema: z.ZodObject<{
     buyer_id: z.ZodString;
+    buyer_document_number: z.ZodEffects<z.ZodOptional<z.ZodString>, string | undefined, unknown>;
     document_date: z.ZodString;
+    operation_description: z.ZodEffects<z.ZodOptional<z.ZodString>, string | undefined, unknown>;
+    delivery_address: z.ZodEffects<z.ZodOptional<z.ZodString>, string | undefined, unknown>;
     notes: z.ZodEffects<z.ZodOptional<z.ZodString>, string | undefined, unknown>;
     lines: z.ZodArray<z.ZodObject<{
         product_id: z.ZodString;
@@ -99,6 +114,9 @@ export declare const issueInputSchema: z.ZodObject<{
     }[];
     buyer_id: string;
     notes?: string | undefined;
+    operation_description?: string | undefined;
+    buyer_document_number?: string | undefined;
+    delivery_address?: string | undefined;
 }, {
     document_date: string;
     lines: {
@@ -108,5 +126,8 @@ export declare const issueInputSchema: z.ZodObject<{
     }[];
     buyer_id: string;
     notes?: unknown;
+    operation_description?: unknown;
+    buyer_document_number?: unknown;
+    delivery_address?: unknown;
 }>;
 //# sourceMappingURL=warehouseCommercial.d.ts.map

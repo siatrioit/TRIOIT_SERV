@@ -8,6 +8,7 @@ exports.listProducts = listProducts;
 exports.createProduct = createProduct;
 exports.updateProduct = updateProduct;
 exports.deleteProduct = deleteProduct;
+exports.listProductMovements = listProductMovements;
 exports.listReceipts = listReceipts;
 exports.getReceipt = getReceipt;
 exports.createReceipt = createReceipt;
@@ -25,9 +26,26 @@ function docNumber(prefix) {
     return `${prefix}-${date}-${rand}`;
 }
 async function applyProductStockChange(conn, productId, delta, movementType, opts) {
-    const row = await (0, pool_1.queryOneConn)(conn, 'SELECT quantity_on_hand FROM warehouse_products WHERE id = ? AND is_active = 1 FOR UPDATE', [productId]);
+    const row = await (0, pool_1.queryOneConn)(conn, 'SELECT quantity_on_hand, is_service FROM warehouse_products WHERE id = ? AND is_active = 1 FOR UPDATE', [productId]);
     if (!row)
         throw new errorHandler_1.AppError(404, 'Prece nav atrasta', 'NOT_FOUND');
+    if (Number(row.is_service)) {
+        await (0, pool_1.queryConn)(conn, `INSERT INTO warehouse_product_movements (
+        id, product_id, movement_type, quantity, quantity_after,
+        reference_type, reference_id, notes, created_by
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+            (0, uuid_1.v4)(),
+            productId,
+            movementType,
+            Math.abs(delta),
+            0,
+            opts.referenceType ?? null,
+            opts.referenceId ?? null,
+            opts.notes ?? null,
+            opts.createdBy ?? null,
+        ]);
+        return 0;
+    }
     const after = Number(row.quantity_on_hand) + delta;
     if (after < 0) {
         throw new errorHandler_1.AppError(409, 'Nepietiekams preces atlikums', 'INSUFFICIENT_STOCK');
@@ -63,29 +81,54 @@ async function assertBuyer(clientId) {
         throw new errorHandler_1.AppError(400, 'Pircējs nav atrasts', 'INVALID_BUYER');
 }
 async function listProductGroups() {
-    return (0, pool_1.query)(`SELECT g.*,
+    return (0, pool_1.query)(`SELECT g.*, pg.name AS parent_name,
       (SELECT COUNT(*) FROM warehouse_products p WHERE p.group_id = g.id AND p.is_active = 1) AS product_count
      FROM warehouse_product_groups g
+     LEFT JOIN warehouse_product_groups pg ON pg.id = g.parent_id
      WHERE g.is_active = 1
-     ORDER BY g.sort_order ASC, g.name ASC`);
+     ORDER BY COALESCE(g.parent_id, g.id), g.parent_id IS NOT NULL, g.sort_order ASC, g.name ASC`);
+}
+async function assertValidParentGroup(parentId) {
+    if (!parentId)
+        return;
+    const parent = await (0, pool_1.queryOne)('SELECT parent_id FROM warehouse_product_groups WHERE id = ? AND is_active = 1', [parentId]);
+    if (!parent)
+        throw new errorHandler_1.AppError(400, 'Galvenā grupa nav atrasta', 'INVALID_PARENT_GROUP');
+    if (parent.parent_id) {
+        throw new errorHandler_1.AppError(400, 'Apakšgrupu var izveidot tikai zem galvenās grupas', 'INVALID_PARENT_GROUP');
+    }
 }
 async function createProductGroup(input) {
+    await assertValidParentGroup(input.parent_id);
     const id = (0, uuid_1.v4)();
-    await (0, pool_1.query)(`INSERT INTO warehouse_product_groups (id, name, sort_order) VALUES (?, ?, ?)`, [id, input.name.trim(), input.sort_order ?? 0]);
-    const row = await (0, pool_1.queryOne)('SELECT * FROM warehouse_product_groups WHERE id = ?', [id]);
+    await (0, pool_1.query)(`INSERT INTO warehouse_product_groups (id, name, parent_id, sort_order) VALUES (?, ?, ?, ?)`, [id, input.name.trim(), input.parent_id ?? null, input.sort_order ?? 0]);
+    const row = await (0, pool_1.queryOne)(`SELECT g.*, pg.name AS parent_name
+     FROM warehouse_product_groups g
+     LEFT JOIN warehouse_product_groups pg ON pg.id = g.parent_id
+     WHERE g.id = ?`, [id]);
     if (!row)
         throw new errorHandler_1.AppError(500, 'Neizdevās izveidot grupu');
     return row;
 }
 async function updateProductGroup(id, input) {
-    const existing = await (0, pool_1.queryOne)('SELECT id FROM warehouse_product_groups WHERE id = ? AND is_active = 1', [id]);
+    const existing = await (0, pool_1.queryOne)('SELECT id, parent_id FROM warehouse_product_groups WHERE id = ? AND is_active = 1', [id]);
     if (!existing)
         throw new errorHandler_1.AppError(404, 'Grupa nav atrasta', 'NOT_FOUND');
+    if (input.parent_id !== undefined) {
+        await assertValidParentGroup(input.parent_id);
+        if (input.parent_id === id) {
+            throw new errorHandler_1.AppError(400, 'Grupa nevar būt pati sev apakšgrupa', 'INVALID_PARENT_GROUP');
+        }
+    }
     const fields = [];
     const values = [];
     if (input.name !== undefined) {
         fields.push('name = ?');
         values.push(input.name.trim());
+    }
+    if (input.parent_id !== undefined) {
+        fields.push('parent_id = ?');
+        values.push(input.parent_id);
     }
     if (input.sort_order !== undefined) {
         fields.push('sort_order = ?');
@@ -97,10 +140,17 @@ async function updateProductGroup(id, input) {
             id,
         ]);
     }
-    const row = await (0, pool_1.queryOne)('SELECT * FROM warehouse_product_groups WHERE id = ?', [id]);
+    const row = await (0, pool_1.queryOne)(`SELECT g.*, pg.name AS parent_name
+     FROM warehouse_product_groups g
+     LEFT JOIN warehouse_product_groups pg ON pg.id = g.parent_id
+     WHERE g.id = ?`, [id]);
     return row;
 }
 async function deleteProductGroup(id) {
+    const children = await (0, pool_1.queryOne)('SELECT COUNT(*) AS total FROM warehouse_product_groups WHERE parent_id = ? AND is_active = 1', [id]);
+    if ((children?.total ?? 0) > 0) {
+        throw new errorHandler_1.AppError(409, 'Grupai ir apakšgrupas — vispirms noņemiet tās', 'HAS_SUBGROUPS');
+    }
     const inUse = await (0, pool_1.queryOne)('SELECT COUNT(*) AS total FROM warehouse_products WHERE group_id = ? AND is_active = 1', [id]);
     if ((inUse?.total ?? 0) > 0) {
         throw new errorHandler_1.AppError(409, 'Grupā ir preces — vispirms pārvietojiet vai dzēsiet tās', 'HAS_PRODUCTS');
@@ -108,28 +158,37 @@ async function deleteProductGroup(id) {
     await (0, pool_1.query)('UPDATE warehouse_product_groups SET is_active = 0 WHERE id = ?', [id]);
 }
 async function listProducts(search, groupId) {
-    let sql = `SELECT p.*, g.name AS group_name
+    let sql = `SELECT p.*,
+                    g.name AS group_name,
+                    pg.name AS subgroup_name,
+                    CASE
+                      WHEN pg.name IS NOT NULL THEN CONCAT(pg.name, ' / ', g.name)
+                      ELSE g.name
+                    END AS group_path
              FROM warehouse_products p
              LEFT JOIN warehouse_product_groups g ON g.id = p.group_id
+             LEFT JOIN warehouse_product_groups pg ON pg.id = g.parent_id
              WHERE p.is_active = 1`;
     const params = [];
     if (groupId) {
-        sql += ' AND p.group_id = ?';
-        params.push(groupId);
+        sql += ` AND (p.group_id = ? OR p.group_id IN (
+      SELECT id FROM warehouse_product_groups WHERE parent_id = ? AND is_active = 1
+    ))`;
+        params.push(groupId, groupId);
     }
     if (search?.trim()) {
         sql += ' AND (p.name LIKE ? OR p.sku LIKE ? OR p.description LIKE ?)';
         const term = `%${search.trim()}%`;
         params.push(term, term, term);
     }
-    sql += ' ORDER BY g.sort_order ASC, g.name ASC, p.name ASC';
+    sql += ' ORDER BY pg.sort_order ASC, pg.name ASC, g.sort_order ASC, g.name ASC, p.name ASC';
     return (0, pool_1.query)(sql, params);
 }
 async function createProduct(input, createdBy) {
     const id = (0, uuid_1.v4)();
     await (0, pool_1.query)(`INSERT INTO warehouse_products (
-      id, group_id, sku, name, description, unit, min_quantity, purchase_price, sale_price, created_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+      id, group_id, sku, name, description, unit, min_quantity, purchase_price, sale_price, is_service, created_by
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
         id,
         input.group_id ?? null,
         input.sku ?? null,
@@ -139,11 +198,19 @@ async function createProduct(input, createdBy) {
         input.min_quantity ?? null,
         input.purchase_price ?? null,
         input.sale_price ?? null,
+        input.is_service ? 1 : 0,
         createdBy ?? null,
     ]);
-    const row = await (0, pool_1.queryOne)(`SELECT p.*, g.name AS group_name
+    const row = await (0, pool_1.queryOne)(`SELECT p.*,
+            g.name AS group_name,
+            pg.name AS subgroup_name,
+            CASE
+              WHEN pg.name IS NOT NULL THEN CONCAT(pg.name, ' / ', g.name)
+              ELSE g.name
+            END AS group_path
      FROM warehouse_products p
      LEFT JOIN warehouse_product_groups g ON g.id = p.group_id
+     LEFT JOIN warehouse_product_groups pg ON pg.id = g.parent_id
      WHERE p.id = ?`, [id]);
     if (!row)
         throw new errorHandler_1.AppError(500, 'Neizdevās izveidot preci');
@@ -164,43 +231,89 @@ async function updateProduct(id, input) {
         'min_quantity',
         'purchase_price',
         'sale_price',
+        'is_service',
     ]) {
         if (input[key] !== undefined) {
             fields.push(`${key} = ?`);
             const v = input[key];
-            values.push(typeof v === 'string' ? v.trim() || null : v ?? null);
+            if (key === 'is_service') {
+                values.push(v ? 1 : 0);
+            }
+            else {
+                values.push(typeof v === 'string' ? v.trim() || null : v ?? null);
+            }
         }
     }
     if (fields.length) {
         await (0, pool_1.query)(`UPDATE warehouse_products SET ${fields.join(', ')} WHERE id = ?`, [...values, id]);
     }
-    const row = await (0, pool_1.queryOne)(`SELECT p.*, g.name AS group_name
+    const row = await (0, pool_1.queryOne)(`SELECT p.*,
+            g.name AS group_name,
+            pg.name AS subgroup_name,
+            CASE
+              WHEN pg.name IS NOT NULL THEN CONCAT(pg.name, ' / ', g.name)
+              ELSE g.name
+            END AS group_path
      FROM warehouse_products p
      LEFT JOIN warehouse_product_groups g ON g.id = p.group_id
+     LEFT JOIN warehouse_product_groups pg ON pg.id = g.parent_id
      WHERE p.id = ?`, [id]);
     return row;
 }
 async function deleteProduct(id) {
     await (0, pool_1.query)('UPDATE warehouse_products SET is_active = 0 WHERE id = ?', [id]);
 }
+async function listProductMovements(opts) {
+    const params = [];
+    let where = 'WHERE p.is_active = 1';
+    if (opts?.productId) {
+        where += ' AND m.product_id = ?';
+        params.push(opts.productId);
+    }
+    const limit = Math.min(opts?.limit ?? 500, 1000);
+    return (0, pool_1.query)(`SELECT m.*,
+            p.name AS product_name,
+            p.unit AS product_unit,
+            p.is_service,
+            u.full_name AS created_by_name,
+            CASE
+              WHEN m.reference_type = 'receipt' THEN (
+                SELECT document_number FROM warehouse_receipts WHERE id = m.reference_id LIMIT 1
+              )
+              WHEN m.reference_type = 'issue' THEN (
+                SELECT document_number FROM warehouse_issues WHERE id = m.reference_id LIMIT 1
+              )
+              ELSE NULL
+            END AS reference_number
+     FROM warehouse_product_movements m
+     JOIN warehouse_products p ON p.id = m.product_id
+     LEFT JOIN users u ON u.id = m.created_by
+     ${where}
+     ORDER BY m.created_at DESC
+     LIMIT ?`, [...params, limit]);
+}
 async function loadReceiptLines(receiptId) {
-    return (0, pool_1.query)(`SELECT l.*, p.name AS product_name, p.sku AS product_sku
+    return (0, pool_1.query)(`SELECT l.*, p.name AS product_name, p.sku AS product_sku, p.unit AS product_unit
      FROM warehouse_receipt_lines l
      JOIN warehouse_products p ON p.id = l.product_id
      WHERE l.receipt_id = ?
      ORDER BY l.sort_order ASC, l.id ASC`, [receiptId]);
 }
+const RECEIPT_SELECT = `
+  SELECT r.*,
+         c.name AS supplier_name,
+         c.registration_number AS supplier_registration_number,
+         c.vat_number AS supplier_vat_number,
+         c.address AS supplier_address
+  FROM warehouse_receipts r
+  JOIN clients c ON c.id = r.supplier_id
+`;
 async function listReceipts() {
-    return (0, pool_1.query)(`SELECT r.*, c.name AS supplier_name
-     FROM warehouse_receipts r
-     JOIN clients c ON c.id = r.supplier_id
+    return (0, pool_1.query)(`${RECEIPT_SELECT}
      ORDER BY r.document_date DESC, r.created_at DESC`);
 }
 async function getReceipt(id) {
-    const row = await (0, pool_1.queryOne)(`SELECT r.*, c.name AS supplier_name
-     FROM warehouse_receipts r
-     JOIN clients c ON c.id = r.supplier_id
-     WHERE r.id = ?`, [id]);
+    const row = await (0, pool_1.queryOne)(`${RECEIPT_SELECT} WHERE r.id = ?`, [id]);
     if (!row)
         return null;
     row.lines = await loadReceiptLines(id);
@@ -212,8 +325,18 @@ async function createReceipt(input, createdBy) {
     const documentNumber = docNumber('WH-IN');
     await (0, pool_1.withMysqlTransaction)(async (conn) => {
         await (0, pool_1.queryConn)(conn, `INSERT INTO warehouse_receipts (
-        id, document_number, supplier_id, document_date, status, notes, created_by
-      ) VALUES (?, ?, ?, ?, 'draft', ?, ?)`, [id, documentNumber, input.supplier_id, input.document_date, input.notes ?? null, createdBy ?? null]);
+        id, document_number, supplier_id, supplier_document_number, document_date,
+        status, operation_description, notes, created_by
+      ) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?)`, [
+            id,
+            documentNumber,
+            input.supplier_id,
+            input.supplier_document_number?.trim() || null,
+            input.document_date,
+            input.operation_description?.trim() || null,
+            input.notes ?? null,
+            createdBy ?? null,
+        ]);
         let sort = 0;
         for (const line of input.lines) {
             await (0, pool_1.queryConn)(conn, `INSERT INTO warehouse_receipt_lines (id, receipt_id, product_id, quantity, unit_price, sort_order)
@@ -249,23 +372,27 @@ async function postReceipt(id, createdBy) {
     return (await getReceipt(id));
 }
 async function loadIssueLines(issueId) {
-    return (0, pool_1.query)(`SELECT l.*, p.name AS product_name, p.sku AS product_sku
+    return (0, pool_1.query)(`SELECT l.*, p.name AS product_name, p.sku AS product_sku, p.unit AS product_unit
      FROM warehouse_issue_lines l
      JOIN warehouse_products p ON p.id = l.product_id
      WHERE l.issue_id = ?
      ORDER BY l.sort_order ASC, l.id ASC`, [issueId]);
 }
+const ISSUE_SELECT = `
+  SELECT i.*,
+         c.name AS buyer_name,
+         c.registration_number AS buyer_registration_number,
+         c.vat_number AS buyer_vat_number,
+         c.address AS buyer_address
+  FROM warehouse_issues i
+  JOIN clients c ON c.id = i.buyer_id
+`;
 async function listIssues() {
-    return (0, pool_1.query)(`SELECT i.*, c.name AS buyer_name
-     FROM warehouse_issues i
-     JOIN clients c ON c.id = i.buyer_id
+    return (0, pool_1.query)(`${ISSUE_SELECT}
      ORDER BY i.document_date DESC, i.created_at DESC`);
 }
 async function getIssue(id) {
-    const row = await (0, pool_1.queryOne)(`SELECT i.*, c.name AS buyer_name
-     FROM warehouse_issues i
-     JOIN clients c ON c.id = i.buyer_id
-     WHERE i.id = ?`, [id]);
+    const row = await (0, pool_1.queryOne)(`${ISSUE_SELECT} WHERE i.id = ?`, [id]);
     if (!row)
         return null;
     row.lines = await loadIssueLines(id);
@@ -277,8 +404,19 @@ async function createIssue(input, createdBy) {
     const documentNumber = docNumber('WH-OUT');
     await (0, pool_1.withMysqlTransaction)(async (conn) => {
         await (0, pool_1.queryConn)(conn, `INSERT INTO warehouse_issues (
-        id, document_number, buyer_id, document_date, status, notes, created_by
-      ) VALUES (?, ?, ?, ?, 'draft', ?, ?)`, [id, documentNumber, input.buyer_id, input.document_date, input.notes ?? null, createdBy ?? null]);
+        id, document_number, buyer_id, buyer_document_number, document_date,
+        status, operation_description, delivery_address, notes, created_by
+      ) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)`, [
+            id,
+            documentNumber,
+            input.buyer_id,
+            input.buyer_document_number?.trim() || null,
+            input.document_date,
+            input.operation_description?.trim() || null,
+            input.delivery_address?.trim() || null,
+            input.notes ?? null,
+            createdBy ?? null,
+        ]);
         let sort = 0;
         for (const line of input.lines) {
             await (0, pool_1.queryConn)(conn, `INSERT INTO warehouse_issue_lines (id, issue_id, product_id, quantity, unit_price, sort_order)
