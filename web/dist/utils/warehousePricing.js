@@ -1,21 +1,25 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.roundMoney = roundMoney;
+exports.purchaseUnitIncVat = purchaseUnitIncVat;
 exports.calcReceiptLineTotals = calcReceiptLineTotals;
 exports.calcReceiptTotals = calcReceiptTotals;
 exports.calcPaymentStatus = calcPaymentStatus;
 function roundMoney(value) {
     return Math.round(value * 100) / 100;
 }
+function purchaseUnitIncVat(purchaseExVat, vatRate) {
+    return roundMoney(purchaseExVat * (1 + vatRate / 100));
+}
 function calcReceiptLineTotals(line) {
     const qty = Number(line.quantity) || 0;
     const purchase = Number(line.purchase_price_ex_vat) || 0;
-    const sale = Number(line.sale_price_ex_vat) || 0;
+    const saleIncUnit = Number(line.sale_price_inc_vat) || 0;
     const vatRate = Number(line.vat_rate) || 21;
     const purchaseEx = roundMoney(qty * purchase);
     const vatAmount = roundMoney(purchaseEx * (vatRate / 100));
     const purchaseInc = roundMoney(purchaseEx + vatAmount);
-    const saleInc = roundMoney(qty * sale * (1 + vatRate / 100));
+    const saleInc = roundMoney(qty * saleIncUnit);
     return { purchaseEx, vatAmount, purchaseInc, saleInc };
 }
 function calcReceiptTotals(lines) {

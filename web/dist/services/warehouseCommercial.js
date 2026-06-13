@@ -323,11 +323,28 @@ async function loadReceiptLines(receiptId) {
      WHERE l.receipt_id = ?
      ORDER BY l.sort_order ASC, l.id ASC`, [receiptId]);
 }
+function normalizeDocumentDate(value) {
+    if (value == null || value === '')
+        return '';
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+        const y = value.getFullYear();
+        const m = String(value.getMonth() + 1).padStart(2, '0');
+        const d = String(value.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+    const s = String(value);
+    const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+    return m ? m[1] : '';
+}
+function normalizeReceipt(receipt) {
+    receipt.document_date = normalizeDocumentDate(receipt.document_date);
+    return receipt;
+}
 function enrichReceiptTotals(receipt) {
     const pricingLines = (receipt.lines ?? []).map((line) => ({
         quantity: Number(line.quantity),
         purchase_price_ex_vat: Number(line.unit_price ?? 0),
-        sale_price_ex_vat: Number(line.sale_price ?? 0),
+        sale_price_inc_vat: Number(line.sale_price ?? 0),
         vat_rate: Number(line.product_vat_rate ?? 21),
     }));
     const totals = (0, warehousePricing_1.calcReceiptTotals)(pricingLines);
@@ -361,6 +378,7 @@ async function listReceipts(opts) {
     sql += ` ORDER BY ${sortBy} ${sortDir}, r.created_at DESC`;
     const rows = await (0, pool_1.query)(sql, params);
     const enriched = await Promise.all(rows.map(async (row) => {
+        normalizeReceipt(row);
         row.lines = await loadReceiptLines(row.id);
         return enrichReceiptTotals(row);
     }));
@@ -373,6 +391,7 @@ async function getReceipt(id) {
     const row = await (0, pool_1.queryOne)(`${RECEIPT_SELECT} WHERE r.id = ?`, [id]);
     if (!row)
         return null;
+    normalizeReceipt(row);
     row.lines = await loadReceiptLines(id);
     return enrichReceiptTotals(row);
 }
@@ -421,8 +440,12 @@ async function updateReceipt(id, input) {
         values.push(input.supplier_document_number?.trim() || null);
     }
     if (input.document_date !== undefined) {
+        const normalized = normalizeDocumentDate(input.document_date);
+        if (!normalized) {
+            throw new errorHandler_1.AppError(400, 'Pavadzīmes datums ir obligāts', 'INVALID_DATE');
+        }
         fields.push('document_date = ?');
-        values.push(input.document_date);
+        values.push(normalized);
     }
     if (input.operation_description !== undefined) {
         fields.push('operation_description = ?');

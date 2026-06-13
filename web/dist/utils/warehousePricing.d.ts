@@ -1,8 +1,9 @@
 export declare function roundMoney(value: number): number;
+export declare function purchaseUnitIncVat(purchaseExVat: number, vatRate: number): number;
 export type ReceiptLinePricing = {
     quantity: number;
     purchase_price_ex_vat: number;
-    sale_price_ex_vat: number;
+    sale_price_inc_vat: number;
     vat_rate: number;
 };
 export declare function calcReceiptLineTotals(line: ReceiptLinePricing): {
