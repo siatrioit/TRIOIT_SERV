@@ -77,6 +77,7 @@ export function IncidentDetailPage() {
         <IncidentStatusSection
           incidentId={id}
           status={incident.status}
+          savedResolution={incident.resolution}
           canEdit={canPost}
         />
       )}

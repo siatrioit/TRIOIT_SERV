@@ -540,11 +540,18 @@ incidentsRouter.patch('/:id/status', authorize('admin', 'manager', 'technician')
     if (!existing) throw new AppError(404, 'Incident not found');
 
     const closed = await isClosedIncidentStatus(status);
+    const resolutionValue = resolution?.trim() || null;
+
+    if (closed && !resolutionValue) {
+      throw new AppError(400, 'Noslēdzot atgadījumu, norādiet risinājumu', 'RESOLUTION_REQUIRED');
+    }
+
     const completedAt = closed ? new Date().toISOString() : null;
+    const finalResolution = closed ? resolutionValue : null;
 
     await query(
       'UPDATE incidents SET status = ?, resolution = ?, completed_at = ? WHERE id = ?',
-      [status, resolution, completedAt, req.params.id]
+      [status, finalResolution, completedAt, req.params.id]
     );
 
     if (existing.status !== status) {
@@ -553,7 +560,7 @@ incidentsRouter.patch('/:id/status', authorize('admin', 'manager', 'technician')
         existing.status,
         status,
         await actorFromReq(req),
-        resolution
+        resolutionValue
       );
     }
 

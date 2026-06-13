@@ -23,6 +23,8 @@ export interface Incident {
   asset_component_id?: string | null;
   asset_component_name?: string | null;
   unread_count?: number;
+  resolution?: string | null;
+  completed_at?: string | null;
 }
 
 export interface IncidentActivityEntry {
