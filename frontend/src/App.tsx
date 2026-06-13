@@ -12,7 +12,11 @@ import { IncidentDetailPage } from './pages/IncidentDetailPage';
 import { NewIncidentPage } from './pages/NewIncidentPage';
 import { InvoicesPage } from './pages/InvoicesPage';
 import { MapPage } from './pages/MapPage';
-import { WarehousePage } from './pages/WarehousePage';
+import { WarehouseLayout } from './components/layout/WarehouseLayout';
+import { WarehouseProductsPage } from './pages/warehouse/WarehouseProductsPage';
+import { WarehouseClientsPage } from './pages/warehouse/WarehouseClientsPage';
+import { WarehouseReceiptsPage } from './pages/warehouse/WarehouseReceiptsPage';
+import { WarehouseIssuesPage } from './pages/warehouse/WarehouseIssuesPage';
 import { CustomerAssetsPage } from './pages/CustomerAssetsPage';
 import { UsersPage } from './pages/UsersPage';
 import { SetupLayout } from './components/layout/SetupLayout';
@@ -70,7 +74,13 @@ export default function App() {
         <Route path="incidents/:id" element={<IncidentDetailPage />} />
         <Route path="invoices" element={<InvoicesPage />} />
         <Route path="assets" element={<CustomerAssetsPage />} />
-        <Route path="warehouse" element={<WarehousePage />} />
+        <Route path="warehouse" element={<WarehouseLayout />}>
+          <Route index element={<Navigate to="/warehouse/products" replace />} />
+          <Route path="products" element={<WarehouseProductsPage />} />
+          <Route path="clients" element={<WarehouseClientsPage />} />
+          <Route path="receipts" element={<WarehouseReceiptsPage />} />
+          <Route path="issues" element={<WarehouseIssuesPage />} />
+        </Route>
         <Route path="map" element={<MapPage />} />
         <Route path="setup" element={<SetupLayout />}>
           <Route index element={<Navigate to="/setup/users" replace />} />

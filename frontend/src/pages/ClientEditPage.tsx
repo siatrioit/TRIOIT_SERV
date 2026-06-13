@@ -22,6 +22,10 @@ function sortByName(objects: ClientObjectInput[]): ClientObjectInput[] {
   return [...objects].sort((a, b) => a.name.localeCompare(b.name, 'lv'));
 }
 
+function clientFlag(v: unknown): boolean {
+  return v === true || v === 1 || v === '1';
+}
+
 type ModalState =
   | { open: false }
   | { open: true; mode: 'create' }
@@ -49,6 +53,9 @@ export function ClientEditPage() {
   const [city, setCity] = useState('');
   const [postalCode, setPostalCode] = useState('');
   const [notes, setNotes] = useState('');
+  const [isSupplier, setIsSupplier] = useState(false);
+  const [isBuyer, setIsBuyer] = useState(false);
+  const [isServiceClient, setIsServiceClient] = useState(true);
   const [objects, setObjects] = useState<ClientObjectInput[]>([]);
   const [closedObjects, setClosedObjects] = useState<ClientObjectInput[]>([]);
   const [modal, setModal] = useState<ModalState>({ open: false });
@@ -72,6 +79,9 @@ export function ClientEditPage() {
       setCity(c.city || '');
       setPostalCode(c.postal_code || '');
       setNotes(c.notes || '');
+      setIsSupplier(clientFlag(c.is_supplier));
+      setIsBuyer(clientFlag(c.is_buyer));
+      setIsServiceClient(clientFlag(c.is_service_client));
       setObjects(sortByName((c.objects || []).map(mapObject)));
       setClosedObjects(sortByName((c.closed_objects || []).map(mapObject)));
     } catch (e) {
@@ -98,6 +108,9 @@ export function ClientEditPage() {
     postal_code: postalCode.trim() || undefined,
     country: 'LV' as const,
     notes: notes.trim() || undefined,
+    is_supplier: isSupplier,
+    is_buyer: isBuyer,
+    is_service_client: isServiceClient,
   });
 
   const handleSaveClient = async (e: React.FormEvent) => {
@@ -296,6 +309,30 @@ export function ClientEditPage() {
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
         />
+
+        <div className="lg:col-span-2 space-y-2 pt-1">
+          <p className="text-sm font-medium text-gray-700">Lomas</p>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={isSupplier}
+              onChange={(e) => setIsSupplier(e.target.checked)}
+            />
+            Piegādātājs (noliktavas saņemšana)
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={isBuyer} onChange={(e) => setIsBuyer(e.target.checked)} />
+            Pircējs (noliktavas izrakstīšana)
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={isServiceClient}
+              onChange={(e) => setIsServiceClient(e.target.checked)}
+            />
+            Apkalpojam tehniku (redzams izsaukumos)
+          </label>
+        </div>
 
         <div className="lg:col-span-2 pt-1">
           <button type="submit" className="btn-primary w-full sm:w-auto" disabled={savingClient}>

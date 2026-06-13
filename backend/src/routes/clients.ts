@@ -57,6 +57,12 @@ const clientSchema = z.object({
 
   notes: optionalString,
 
+  is_supplier: z.coerce.boolean().optional(),
+
+  is_buyer: z.coerce.boolean().optional(),
+
+  is_service_client: z.coerce.boolean().optional(),
+
 });
 
 
@@ -93,6 +99,10 @@ clientsRouter.get('/', async (req, res, next) => {
 
     const city = req.query.city as string | undefined;
 
+    const serviceOnly = req.query.service_only === '1' || req.query.service_only === 'true';
+
+    const warehouseOnly = req.query.warehouse === '1' || req.query.warehouse === 'true';
+
 
 
     let where = 'WHERE c.is_active = 1';
@@ -101,6 +111,17 @@ clientsRouter.get('/', async (req, res, next) => {
 
 
 
+    if (serviceOnly) {
+
+      where += ' AND c.is_service_client = 1';
+
+    }
+
+    if (warehouseOnly) {
+
+      where += ' AND (c.is_supplier = 1 OR c.is_buyer = 1 OR c.is_service_client = 1)';
+
+    }
     if (search) {
 
       where += ` AND (
@@ -232,9 +253,10 @@ clientsRouter.post('/', authorize('admin', 'manager', 'technician'), async (req,
 
       `INSERT INTO clients (id, name, client_type, registration_number, vat_number, address, city, postal_code, country,
 
-        latitude, longitude, phone, email, representative, notes, created_by)
+        latitude, longitude, phone, email, representative, notes,
+        is_supplier, is_buyer, is_service_client, created_by)
 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 
       [
 
@@ -267,6 +289,12 @@ clientsRouter.post('/', authorize('admin', 'manager', 'technician'), async (req,
         clientFields.representative ?? null,
 
         clientFields.notes ?? null,
+
+        clientFields.is_supplier ? 1 : 0,
+
+        clientFields.is_buyer ? 1 : 0,
+
+        clientFields.is_service_client ? 1 : 0,
 
         req.user?.userId,
 

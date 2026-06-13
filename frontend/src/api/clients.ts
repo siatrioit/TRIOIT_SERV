@@ -40,6 +40,9 @@ export interface Client {
   email?: string;
   representative?: string;
   notes?: string;
+  is_supplier?: boolean | number;
+  is_buyer?: boolean | number;
+  is_service_client?: boolean | number;
   object_count?: number;
   objects?: ClientObjectInput[];
   closed_objects?: ClientObjectInput[];
@@ -58,15 +61,26 @@ export interface ClientPayload {
   email?: string;
   representative?: string;
   notes?: string;
+  is_supplier?: boolean;
+  is_buyer?: boolean;
+  is_service_client?: boolean;
   objects?: ClientObjectInput[];
 }
 
 export const clientsApi = {
-  list: (params?: { search?: string; page?: string; limit?: string }) => {
+  list: (params?: {
+    search?: string;
+    page?: string;
+    limit?: string;
+    service_only?: string;
+    warehouse?: string;
+  }) => {
     const q = new URLSearchParams();
     if (params?.search) q.set('search', params.search);
     if (params?.page) q.set('page', params.page);
     if (params?.limit) q.set('limit', params.limit);
+    if (params?.service_only) q.set('service_only', params.service_only);
+    if (params?.warehouse) q.set('warehouse', params.warehouse);
     const qs = q.toString();
     return api.get<{ data: Client[] }>(`/clients${qs ? `?${qs}` : ''}`);
   },

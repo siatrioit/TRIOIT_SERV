@@ -26,6 +26,9 @@ export interface Client {
   email?: string;
   representative?: string;
   notes?: string;
+  is_supplier?: boolean | number;
+  is_buyer?: boolean | number;
+  is_service_client?: boolean | number;
   is_active: boolean;
   created_at: string;
   updated_at: string;

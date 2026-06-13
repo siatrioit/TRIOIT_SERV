@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate, authorize } from '../middleware/auth';
+import { warehouseCommercialRouter } from './warehouseCommercial';
 import {
   createWarehouseItem,
   listMovements,
@@ -11,6 +12,7 @@ import { warehouseItemInputSchema, warehouseStockInSchema } from '../schemas/war
 
 export const warehouseRouter = Router();
 warehouseRouter.use(authenticate);
+warehouseRouter.use(warehouseCommercialRouter);
 
 warehouseRouter.get('/', async (req, res, next) => {
   try {

@@ -28,7 +28,7 @@ export function IncidentLocationPicker({
 
   const { data: clientsData, isLoading: clientsLoading } = useQuery({
     queryKey: ['clients', 'picker'],
-    queryFn: () => clientsApi.list({ limit: '500' }),
+    queryFn: () => clientsApi.list({ service_only: '1', limit: '500' }),
   });
 
   const { data: clientData, isLoading: objectsLoading } = useQuery({
