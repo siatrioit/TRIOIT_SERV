@@ -15,6 +15,7 @@ const assetTypes_1 = require("../../services/assetTypes");
 const pushNotifications_1 = require("../../services/pushNotifications");
 const incidentStatuses_1 = require("../../services/incidentStatuses");
 const unitStatusSync_1 = require("../../services/unitStatusSync");
+const incidentActivity_1 = require("../../services/incidentActivity");
 exports.portalIncidentsRouter = (0, express_1.Router)();
 const createSchema = zod_1.z.object({
     client_id: zod_1.z.string().uuid(),
@@ -164,6 +165,10 @@ exports.portalIncidentsRouter.post('/', async (req, res, next) => {
                 incidentStatus: defaultStatus,
             }, null);
         }
+        await (0, incidentActivity_1.logIncidentCreated)(id, defaultStatus, {
+            userId: portalUserId,
+            userName: reporter?.full_name ?? 'Klienta portāls',
+        });
         const incident = await (0, pool_1.queryOne)(`SELECT i.id, i.incident_number, i.client_id, i.object_id, i.title, i.description,
               i.status, i.priority, i.received_at, i.completed_at, i.resolution,
               c.name AS client_name, co.name AS object_name,

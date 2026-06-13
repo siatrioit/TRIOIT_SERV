@@ -16,6 +16,8 @@ const assetTypes_1 = require("../services/assetTypes");
 const incidentStatuses_1 = require("../services/incidentStatuses");
 const unitActivity_1 = require("../services/unitActivity");
 const unitStatusSync_1 = require("../services/unitStatusSync");
+const incidentActivity_1 = require("../services/incidentActivity");
+const incidentStatuses_2 = require("../services/incidentStatuses");
 exports.incidentsRouter = (0, express_1.Router)();
 exports.incidentsRouter.use(auth_1.authenticate);
 async function actorFromReq(req) {
@@ -132,6 +134,18 @@ exports.incidentsRouter.get('/', async (req, res, next) => {
         next(err);
     }
 });
+exports.incidentsRouter.get('/:id/activity', async (req, res, next) => {
+    try {
+        const existing = await (0, pool_1.queryOne)('SELECT id FROM incidents WHERE id = ?', [req.params.id]);
+        if (!existing)
+            throw new errorHandler_1.AppError(404, 'Incident not found');
+        const entries = await (0, incidentActivity_1.listIncidentActivity)(req.params.id);
+        res.json({ data: entries });
+    }
+    catch (err) {
+        next(err);
+    }
+});
 exports.incidentsRouter.get('/:id', async (req, res, next) => {
     try {
         const incident = await (0, pool_1.queryOne)(`SELECT i.*, co.name AS object_name,
@@ -197,6 +211,7 @@ exports.incidentsRouter.post('/', (0, auth_1.authorize)('admin', 'manager', 'tec
                 incidentStatus: statusCode,
             }, await actorFromReq(req));
         }
+        await (0, incidentActivity_1.logIncidentCreated)(id, statusCode, await actorFromReq(req));
         (0, pushNotifications_1.firePush)(() => (0, pushNotifications_1.notifyNewIncident)({
             incidentId: id,
             incidentNumber,
@@ -230,6 +245,8 @@ exports.incidentsRouter.patch('/:id/assign', (0, auth_1.authorize)('admin', 'man
         }
         await (0, pool_1.query)('UPDATE incidents SET assigned_to = ? WHERE id = ?', [assignee.id, req.params.id]);
         const staffUserId = req.user.userId;
+        const actor = await actorFromReq(req);
+        await (0, incidentActivity_1.logIncidentAssigned)(req.params.id, assignee.full_name, actor);
         await (0, incidentMessages_1.addStaffMessage)(req.params.id, staffUserId, `Izsaukums pārvirzīts lietotājam ${assignee.full_name}.`);
         const incident = await (0, pool_1.queryOne)(`SELECT i.*, co.name AS object_name, au.full_name AS assigned_user_name
        FROM incidents i
@@ -301,11 +318,15 @@ exports.incidentsRouter.patch('/:id/status', (0, auth_1.authorize)('admin', 'man
         })
             .parse(req.body);
         await (0, incidentStatuses_1.assertValidIncidentStatus)(status);
-        const existing = await (0, pool_1.queryOne)('SELECT id, unit_id, client_id, object_id FROM incidents WHERE id = ?', [req.params.id]);
+        const existing = await (0, pool_1.queryOne)('SELECT id, unit_id, client_id, object_id, status FROM incidents WHERE id = ?', [req.params.id]);
         if (!existing)
             throw new errorHandler_1.AppError(404, 'Incident not found');
-        const completedAt = status === 'completed' ? new Date().toISOString() : null;
+        const closed = await (0, incidentStatuses_2.isClosedIncidentStatus)(status);
+        const completedAt = closed ? new Date().toISOString() : null;
         await (0, pool_1.query)('UPDATE incidents SET status = ?, resolution = ?, completed_at = ? WHERE id = ?', [status, resolution, completedAt, req.params.id]);
+        if (existing.status !== status) {
+            await (0, incidentActivity_1.logIncidentStatusChanged)(req.params.id, existing.status, status, await actorFromReq(req), resolution);
+        }
         if (existing.unit_id && existing.object_id) {
             await (0, unitStatusSync_1.syncUnitStatusFromIncident)({
                 unitId: existing.unit_id,
