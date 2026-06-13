@@ -90,13 +90,11 @@ export function PortalIncidentsPage() {
         </Link>
       ) : null}
 
-      {error && (
+      {error ? (
         <div className="card text-red-700 text-sm">
           Neizdevās ielādēt izsaukumus. Mēģiniet vēlreiz.
         </div>
-      )}
-
-      {isLoading ? (
+      ) : isLoading ? (
         <div className="text-center py-8 text-gray-400">Ielādē...</div>
       ) : incidents.length === 0 ? (
         <div className="card text-center text-gray-500 py-8">
