@@ -2,9 +2,10 @@ import { NavLink, Outlet } from 'react-router-dom';
 
 const sections = [
   { to: '/warehouse/products', label: 'Preces un grupas' },
+  { to: '/warehouse/journal', label: 'Preču žurnāls' },
+  { to: '/warehouse/receipts', label: 'Saņemšanas žurnāls' },
+  { to: '/warehouse/issues', label: 'Izrakstīšanas žurnāls' },
   { to: '/warehouse/clients', label: 'Klienti' },
-  { to: '/warehouse/receipts', label: 'Saņemšanas pavadzīmes' },
-  { to: '/warehouse/issues', label: 'Izrakstīšanas pavadzīmes' },
 ];
 
 export function WarehouseLayout() {
@@ -12,7 +13,7 @@ export function WarehouseLayout() {
     <div className="space-y-4 pb-8">
       <div>
         <h2 className="text-lg font-semibold">Noliktava</h2>
-        <p className="text-sm text-gray-500">Preču uzskaite, partneri un pavadzīmes</p>
+        <p className="text-sm text-gray-500">Preču uzskaite, atlikumi un pavadzīmju žurnāli</p>
       </div>
 
       <nav className="flex gap-2 flex-wrap border-b border-gray-200 pb-2">

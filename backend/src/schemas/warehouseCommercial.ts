@@ -3,6 +3,7 @@ import { optionalString } from './fields';
 
 export const productGroupInputSchema = z.object({
   name: z.string().min(1).max(255),
+  parent_id: z.string().uuid().nullable().optional(),
   sort_order: z.number().int().optional(),
 });
 
@@ -15,6 +16,7 @@ export const productInputSchema = z.object({
   min_quantity: z.number().nonnegative().nullable().optional(),
   purchase_price: z.number().nonnegative().nullable().optional(),
   sale_price: z.number().nonnegative().nullable().optional(),
+  is_service: z.coerce.boolean().optional(),
 });
 
 const lineSchema = z.object({
@@ -25,14 +27,19 @@ const lineSchema = z.object({
 
 export const receiptInputSchema = z.object({
   supplier_id: z.string().uuid(),
+  supplier_document_number: optionalString,
   document_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  operation_description: optionalString,
   notes: optionalString,
   lines: z.array(lineSchema).min(1),
 });
 
 export const issueInputSchema = z.object({
   buyer_id: z.string().uuid(),
+  buyer_document_number: optionalString,
   document_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  operation_description: optionalString,
+  delivery_address: optionalString,
   notes: optionalString,
   lines: z.array(lineSchema).min(1),
 });

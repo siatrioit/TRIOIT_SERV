@@ -17,6 +17,7 @@ import { WarehouseProductsPage } from './pages/warehouse/WarehouseProductsPage';
 import { WarehouseClientsPage } from './pages/warehouse/WarehouseClientsPage';
 import { WarehouseReceiptsPage } from './pages/warehouse/WarehouseReceiptsPage';
 import { WarehouseIssuesPage } from './pages/warehouse/WarehouseIssuesPage';
+import { WarehouseProductJournalPage } from './pages/warehouse/WarehouseProductJournalPage';
 import { CustomerAssetsPage } from './pages/CustomerAssetsPage';
 import { UsersPage } from './pages/UsersPage';
 import { SetupLayout } from './components/layout/SetupLayout';
@@ -80,6 +81,7 @@ export default function App() {
         <Route path="warehouse" element={<WarehouseLayout />}>
           <Route index element={<Navigate to="/warehouse/products" replace />} />
           <Route path="products" element={<WarehouseProductsPage />} />
+          <Route path="journal" element={<WarehouseProductJournalPage />} />
           <Route path="clients" element={<WarehouseClientsPage />} />
           <Route path="receipts" element={<WarehouseReceiptsPage />} />
           <Route path="issues" element={<WarehouseIssuesPage />} />

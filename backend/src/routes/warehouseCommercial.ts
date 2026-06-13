@@ -12,6 +12,7 @@ import {
   listIssues,
   listProductGroups,
   listProducts,
+  listProductMovements,
   listReceipts,
   postIssue,
   postReceipt,
@@ -97,6 +98,22 @@ warehouseCommercialRouter.delete('/products/:id', canEdit, async (req, res, next
   try {
     await deleteProduct(req.params.id);
     res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+warehouseCommercialRouter.get('/journal/movements', async (req, res, next) => {
+  try {
+    const productId = req.query.product_id as string | undefined;
+    const limitRaw = req.query.limit as string | undefined;
+    const limit = limitRaw ? Number(limitRaw) : undefined;
+    res.json({
+      data: await listProductMovements({
+        productId,
+        limit: Number.isFinite(limit) ? limit : undefined,
+      }),
+    });
   } catch (err) {
     next(err);
   }

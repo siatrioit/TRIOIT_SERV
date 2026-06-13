@@ -8,7 +8,8 @@ export function ClientsPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['clients', search],
-    queryFn: () => clientsApi.list({ search: search || undefined, limit: '50' }),
+    queryFn: () =>
+      clientsApi.list({ search: search || undefined, limit: '50', service_only: '1' }),
   });
 
   return (

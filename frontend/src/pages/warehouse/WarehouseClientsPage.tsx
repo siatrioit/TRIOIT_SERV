@@ -37,7 +37,8 @@ export function WarehouseClientsPage() {
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
         <p className="text-sm text-gray-500">
-          Partneri noliktavai — piegādātāji, pircēji un servisa klienti
+          Partneri noliktavai — piegādātāji un pircēji. Ja nav atzīmes „Apkalpojam tehniku”, partners
+          netiks rādīts apkalpošanas klientu sarakstā.
         </p>
         <button
           type="button"
