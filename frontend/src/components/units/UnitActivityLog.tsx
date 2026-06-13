@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ApiError } from '../../api/client';
 import { unitsApi, type UnitActivityEntry } from '../../api/units';
+import { isIncidentActivityEntry } from './UnitIncidentJournal';
 
 type UnitActivityLogProps = {
   unitId: string;
@@ -26,7 +27,7 @@ export function UnitActivityLog({ unitId, clientId, objectId }: UnitActivityLogP
     refetchOnMount: 'always',
   });
 
-  const entries = data?.data ?? [];
+  const entries = (data?.data ?? []).filter((e) => !isIncidentActivityEntry(e));
   const errorMessage =
     error instanceof ApiError
       ? error.displayMessage

@@ -12,7 +12,7 @@ import {
 } from '../../api/units';
 import { newIncidentUrl } from '../../utils/newIncidentUrl';
 import { UnitActivityLog } from './UnitActivityLog';
-import { UnitIncidentsSection } from './UnitIncidentsSection';
+import { UnitIncidentJournal } from './UnitIncidentJournal';
 import { Modal } from '../ui/Modal';
 
 const UNIT_STATUSES: UnitStatus[] = ['active', 'repair', 'decommissioned', 'spare'];
@@ -378,7 +378,11 @@ export function UnitModal({
 
         {mode === 'edit' && initial && (
           <>
-            <UnitIncidentsSection unitId={initial.id} />
+            <UnitIncidentJournal
+              unitId={initial.id}
+              clientId={clientId ?? initial.client_id}
+              objectId={objectId ?? initial.object_id ?? undefined}
+            />
             <UnitActivityLog
               unitId={initial.id}
               clientId={clientId ?? initial.client_id}

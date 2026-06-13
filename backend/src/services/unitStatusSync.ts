@@ -111,7 +111,7 @@ async function applyUnitSync(params: {
       unitId,
       { status: targetUnitStatus },
       actor,
-      { statusChangeNote: note }
+      { statusChangeNote: note, incidentId, incidentStatus }
     );
     statusChanged = true;
   }

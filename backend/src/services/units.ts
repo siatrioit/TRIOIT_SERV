@@ -244,7 +244,7 @@ export async function updateUnitForObject(
   unitId: string,
   input: UnitUpdate,
   actor?: UnitActor | null,
-  options?: { statusChangeNote?: string }
+  options?: { statusChangeNote?: string; incidentId?: string; incidentStatus?: string }
 ): Promise<UnitRow | null> {
   const existing = await getUnitForObject(clientId, objectId, unitId);
   if (!existing) return null;
@@ -334,7 +334,7 @@ export async function updateUnitForObject(
       note ||
         `Statuss: ${UNIT_STATUS_LABELS[existing.status] || existing.status} → ${UNIT_STATUS_LABELS[input.status] || input.status}`,
       actor,
-      note ? { source: 'incident' } : undefined
+      note ? { source: 'incident', incident_id: options?.incidentId, incident_status: options?.incidentStatus } : undefined
     );
   }
 

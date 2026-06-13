@@ -49,6 +49,7 @@ export interface UnitActivityEntry {
   description: string;
   actor_user_id?: string | null;
   actor_name?: string | null;
+  metadata?: Record<string, unknown> | string | null;
   created_at: string;
 }
 
