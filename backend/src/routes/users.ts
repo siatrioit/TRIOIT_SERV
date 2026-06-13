@@ -34,7 +34,7 @@ usersRouter.get('/', authorize('admin', 'manager'), async (_req, res, next) => {
 
 usersRouter.get('/:id', authorize('admin', 'manager'), async (req, res, next) => {
   try {
-    const user = await getStaffUser(req.params.id);
+    const user = await getStaffUser(req.params.id, true);
     if (!user) throw new AppError(404, 'User not found', 'NOT_FOUND');
     res.json({ data: user });
   } catch (err) {

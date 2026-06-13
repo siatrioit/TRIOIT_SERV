@@ -34,6 +34,7 @@ import {
   incidentStatusesRouter,
   setupIncidentStatusesRouter,
 } from './routes/incidentStatuses';
+import { companySettingsRouter } from './routes/companySettings';
 import { runMigrations } from './db/migrate';
 import { APP_VERSION } from './version';
 
@@ -112,6 +113,7 @@ app.use(`${API_PREFIX}/asset-types`, assetTypesRouter);
 app.use(`${API_PREFIX}/setup/asset-types`, setupAssetTypesRouter);
 app.use(`${API_PREFIX}/incident-statuses`, incidentStatusesRouter);
 app.use(`${API_PREFIX}/setup/incident-statuses`, setupIncidentStatusesRouter);
+app.use(`${API_PREFIX}/company-settings`, companySettingsRouter);
 
 // cPanel: statiskais frontend no public/ mapes (viena Node.js aplikācija uz serv.trioit.lv)
 const staticDir = process.env.STATIC_DIR;

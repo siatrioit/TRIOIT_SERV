@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
-import { queryOne } from '../db/pool';
+import { query, queryOne } from '../db/pool';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 
@@ -59,11 +59,48 @@ authRouter.post('/login', async (req, res, next) => {
 authRouter.get('/me', authenticate, async (req, res, next) => {
   try {
     const user = await queryOne(
-      'SELECT id, email, full_name, role, phone FROM users WHERE id = ?',
+      'SELECT id, email, full_name, role, phone, signature_data FROM users WHERE id = ?',
       [req.user!.userId]
     );
     if (!user) throw new AppError(404, 'User not found');
-    res.json({ data: user });
+    const { signature_data, ...rest } = user as {
+      signature_data?: string | null;
+      id: string;
+      email: string;
+      full_name: string;
+      role: string;
+      phone?: string | null;
+    };
+    res.json({
+      data: {
+        ...rest,
+        has_signature: Boolean(signature_data?.startsWith('data:image/')),
+        signature_data: signature_data ?? null,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+authRouter.put('/me/signature', authenticate, async (req, res, next) => {
+  try {
+    const body = z
+      .object({
+        signature_data: z.string().nullable(),
+      })
+      .parse(req.body);
+    if (
+      body.signature_data &&
+      !body.signature_data.startsWith('data:image/')
+    ) {
+      throw new AppError(400, 'Nederīgs paraksta attēls', 'INVALID_SIGNATURE');
+    }
+    await query(
+      'UPDATE users SET signature_data = ? WHERE id = ?',
+      [body.signature_data, req.user!.userId]
+    );
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }

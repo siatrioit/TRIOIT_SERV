@@ -22,10 +22,12 @@ import { UsersPage } from './pages/UsersPage';
 import { SetupLayout } from './components/layout/SetupLayout';
 import { AssetTypesSetupPage } from './pages/setup/AssetTypesSetupPage';
 import { IncidentStatusesSetupPage } from './pages/setup/IncidentStatusesSetupPage';
+import { CompanySettingsSetupPage } from './pages/setup/CompanySettingsSetupPage';
 import { PortalLoginPage } from './pages/portal/PortalLoginPage';
 import { PortalIncidentsPage } from './pages/portal/PortalIncidentsPage';
 import { PortalNewIncidentPage } from './pages/portal/PortalNewIncidentPage';
 import { PortalIncidentDetailPage } from './pages/portal/PortalIncidentDetailPage';
+import { MyProfilePage } from './pages/MyProfilePage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token);
@@ -83,9 +85,11 @@ export default function App() {
           <Route path="issues" element={<WarehouseIssuesPage />} />
         </Route>
         <Route path="map" element={<MapPage />} />
+        <Route path="profile" element={<MyProfilePage />} />
         <Route path="setup" element={<SetupLayout />}>
           <Route index element={<Navigate to="/setup/users" replace />} />
           <Route path="users" element={<UsersPage />} />
+          <Route path="company" element={<CompanySettingsSetupPage />} />
           <Route path="asset-types" element={<AssetTypesSetupPage />} />
           <Route path="incident-statuses" element={<IncidentStatusesSetupPage />} />
         </Route>

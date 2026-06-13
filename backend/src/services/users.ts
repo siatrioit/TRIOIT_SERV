@@ -13,6 +13,8 @@ export type StaffUser = {
   phone?: string | null;
   role: UserRole;
   is_active: boolean | number;
+  has_signature?: boolean;
+  signature_data?: string | null;
   last_login_at?: string | null;
   created_at: string;
   updated_at: string;
@@ -22,18 +24,40 @@ type CreateUserInput = z.infer<typeof createUserSchema>;
 type UpdateUserInput = z.infer<typeof updateUserSchema>;
 
 export async function listStaffUsers(): Promise<StaffUser[]> {
-  return query<StaffUser>(
-    `SELECT id, email, full_name, phone, role, is_active, last_login_at, created_at, updated_at
+  const rows = await query<StaffUser & { signature_data?: string | null }>(
+    `SELECT id, email, full_name, phone, role, is_active, signature_data,
+            last_login_at, created_at, updated_at
      FROM users ORDER BY full_name ASC`
   );
+  return rows.map((row) => {
+    const { signature_data, ...rest } = row;
+    return {
+      ...rest,
+      has_signature: Boolean(signature_data?.startsWith('data:image/')),
+    };
+  });
 }
 
-export async function getStaffUser(id: string): Promise<StaffUser | null> {
-  return queryOne<StaffUser>(
-    `SELECT id, email, full_name, phone, role, is_active, last_login_at, created_at, updated_at
+export async function getStaffUser(id: string, includeSignature = false): Promise<StaffUser | null> {
+  const row = await queryOne<StaffUser>(
+    `SELECT id, email, full_name, phone, role, is_active,
+            ${includeSignature ? 'signature_data,' : ''}
+            last_login_at, created_at, updated_at
      FROM users WHERE id = ?`,
     [id]
   );
+  if (!row) return null;
+  if (!includeSignature) {
+    const { signature_data, ...rest } = row as StaffUser & { signature_data?: string | null };
+    return {
+      ...rest,
+      has_signature: Boolean(signature_data?.startsWith('data:image/')),
+    };
+  }
+  return {
+    ...row,
+    has_signature: Boolean(row.signature_data?.startsWith('data:image/')),
+  };
 }
 
 export async function createStaffUser(input: CreateUserInput): Promise<StaffUser> {
@@ -110,6 +134,11 @@ export async function updateStaffUser(
       const hash = await bcrypt.hash(input.password!, 10);
       setParts.push('password_hash = ?');
       values.push(hash);
+      continue;
+    }
+    if (field === 'signature_data') {
+      setParts.push('signature_data = ?');
+      values.push(input.signature_data ?? null);
       continue;
     }
     setParts.push(`${field} = ?`);

@@ -102,6 +102,7 @@ export function IncidentDetailPage() {
             incidentId={id}
             variant="staff"
             canEdit={canPost}
+            incidentClosed={isClosedStatus}
           />
           <IncidentActivityLog incidentId={id} />
           <IncidentMessageThread

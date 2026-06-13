@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { incidentCompletionApi } from '../../api/incidentCompletion';
 import { portalIncidentsApi } from '../../api/portalIncidents';
+import { usePortalAuthStore } from '../../store/portalAuthStore';
 import { Modal } from '../ui/Modal';
 import { isSignatureReady, SignatureCapture } from './SignatureCapture';
 
@@ -9,6 +10,7 @@ type IncidentCompletionSectionProps = {
   incidentId: string;
   variant: 'staff' | 'portal';
   canEdit: boolean;
+  incidentClosed: boolean;
 };
 
 function formatWhen(value: string) {
@@ -22,7 +24,9 @@ export function IncidentCompletionSection({
   incidentId,
   variant,
   canEdit,
+  incidentClosed,
 }: IncidentCompletionSectionProps) {
+  const portalUserName = usePortalAuthStore((s) => s.user?.full_name ?? '');
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
   const [signerName, setSignerName] = useState('');
@@ -46,10 +50,14 @@ export function IncidentCompletionSection({
 
   const signMutation = useMutation({
     mutationFn: async () => {
+      const effectiveName =
+        variant === 'portal' && signature.type === 'drawn'
+          ? portalUserName.trim()
+          : signerName.trim();
       const payload = {
-        signer_name: signerName.trim(),
+        signer_name: effectiveName,
         signature_type: signature.type,
-        signature_data: signature.type === 'typed' ? signerName.trim() : signature.data,
+        signature_data: signature.type === 'typed' ? effectiveName : signature.data,
       };
       if (variant === 'portal') {
         return portalIncidentsApi.signCompletion(incidentId, payload);
@@ -97,7 +105,7 @@ export function IncidentCompletionSection({
     }
   };
 
-  const canSign = canEdit && !completion?.has_signature;
+  const canSign = canEdit && incidentClosed && !completion?.has_signature;
   const canGenerateAct = variant === 'staff' && canEdit && completion?.has_signature && !completion?.has_act;
   const canDownload = variant === 'staff' && completion?.has_act;
 
@@ -126,7 +134,9 @@ export function IncidentCompletionSection({
         </div>
       ) : (
         <p className="text-sm text-gray-500">
-          Pēc darba pabeigšanas lūdziet klientam apstiprināt izpildi ar parakstu.
+          {incidentClosed
+            ? 'Pēc darba pabeigšanas lūdziet klientam apstiprināt izpildi ar parakstu.'
+            : 'Darba apstiprināšana pieejama tikai pēc statusa maiņas uz Atrisināts vai Slēgts.'}
         </p>
       )}
 
@@ -174,7 +184,7 @@ export function IncidentCompletionSection({
             <button
               type="button"
               className="btn-primary w-full sm:w-auto"
-              disabled={signMutation.isPending || !isSignatureReady(signerName, signature)}
+              disabled={signMutation.isPending || !isSignatureReady(signerName, signature, variant === 'portal' ? portalUserName : undefined)}
               onClick={() => signMutation.mutate()}
             >
               {signMutation.isPending ? 'Saglabā...' : 'Apstiprināt'}
@@ -193,6 +203,8 @@ export function IncidentCompletionSection({
             onSignerNameChange={setSignerName}
             onSignatureChange={setSignature}
             disabled={signMutation.isPending}
+            autoSignerName={variant === 'portal' ? portalUserName : undefined}
+            hideNameField={variant === 'portal' && signature.type === 'drawn'}
           />
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>

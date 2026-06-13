@@ -54,9 +54,12 @@ export function AppLayout() {
           </div>
         </div>
         {user && (
-          <p className="text-sm text-primary-100 mt-1 max-w-lg lg:max-w-4xl mx-auto truncate">
+          <Link
+            to="/profile"
+            className="text-sm text-primary-100 mt-1 max-w-lg lg:max-w-4xl mx-auto truncate block hover:text-white"
+          >
             {user.full_name}
-          </p>
+          </Link>
         )}
       </header>
 

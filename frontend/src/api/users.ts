@@ -9,6 +9,8 @@ export interface StaffUser {
   phone?: string | null;
   role: StaffRole;
   is_active: boolean | number;
+  has_signature?: boolean;
+  signature_data?: string | null;
   last_login_at?: string | null;
   created_at: string;
   updated_at: string;
@@ -29,6 +31,7 @@ export interface UpdateStaffUserPayload {
   phone?: string;
   role?: StaffRole;
   is_active?: boolean;
+  signature_data?: string | null;
 }
 
 export const ROLE_LABELS: Record<StaffRole, string> = {

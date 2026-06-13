@@ -104,6 +104,7 @@ export function PortalIncidentDetailPage() {
             incidentId={id}
             variant="portal"
             canEdit={canPost}
+            incidentClosed={isClosed(incident.status)}
           />
           <IncidentMessageThread
             incidentId={id}

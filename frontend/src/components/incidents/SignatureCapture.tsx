@@ -5,6 +5,8 @@ type SignatureCaptureProps = {
   onSignerNameChange: (value: string) => void;
   onSignatureChange: (payload: { type: 'typed' | 'drawn'; data: string }) => void;
   disabled?: boolean;
+  autoSignerName?: string;
+  hideNameField?: boolean;
 };
 
 function isTouchDevice() {
@@ -16,6 +18,8 @@ export function SignatureCapture({
   onSignerNameChange,
   onSignatureChange,
   disabled,
+  autoSignerName,
+  hideNameField,
 }: SignatureCaptureProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawingRef = useRef(false);
@@ -103,16 +107,23 @@ export function SignatureCapture({
 
   return (
     <div className="space-y-3">
-      <div>
-        <label className="text-sm text-gray-600 mb-1 block">Parakstītāja vārds, uzvārds *</label>
-        <input
-          className="input-field"
-          value={signerName}
-          onChange={(e) => onSignerNameChange(e.target.value)}
-          placeholder="Piem., Jānis Bērziņš"
-          disabled={disabled}
-        />
-      </div>
+      {!hideNameField && (
+        <div>
+          <label className="text-sm text-gray-600 mb-1 block">Parakstītāja vārds, uzvārds *</label>
+          <input
+            className="input-field"
+            value={signerName}
+            onChange={(e) => onSignerNameChange(e.target.value)}
+            placeholder="Piem., Jānis Bērziņš"
+            disabled={disabled}
+          />
+        </div>
+      )}
+      {hideNameField && autoSignerName && (
+        <p className="text-sm text-gray-600 bg-gray-50 rounded-xl px-3 py-2">
+          Parakstītājs: <span className="font-medium text-gray-800">{autoSignerName}</span>
+        </p>
+      )}
 
       <div className="flex gap-2">
         <button
@@ -181,9 +192,20 @@ export function SignatureCapture({
 
 export function isSignatureReady(
   signerName: string,
-  signature: { type: 'typed' | 'drawn'; data: string }
+  signature: { type: 'typed' | 'drawn'; data: string },
+  autoSignerName?: string
 ): boolean {
-  if (!signerName.trim()) return false;
-  if (signature.type === 'typed') return signerName.trim().length > 1;
-  return signature.data.startsWith('data:image/');
+  const effectiveName = signerName.trim() || autoSignerName?.trim() || '';
+  if (signature.type === 'typed') {
+    if (!effectiveName) return false;
+    return effectiveName.length > 1;
+  }
+  if (signature.type === 'drawn') {
+    if (autoSignerName && !signerName.trim()) {
+      return signature.data.startsWith('data:image/');
+    }
+    if (!effectiveName) return false;
+    return signature.data.startsWith('data:image/');
+  }
+  return false;
 }

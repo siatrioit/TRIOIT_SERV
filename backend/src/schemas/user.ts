@@ -18,4 +18,5 @@ export const updateUserSchema = z.object({
   role: userRoleSchema.optional(),
   is_active: z.boolean().optional(),
   password: z.string().min(8).optional(),
+  signature_data: z.string().nullable().optional(),
 });
