@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import { assetTypesApi } from '../../api/assetTypes';
@@ -45,6 +45,7 @@ export function UnitModal({
   defaultParentId,
   forceSubAsset,
 }: UnitModalProps) {
+  const queryClient = useQueryClient();
   const [unitKind, setUnitKind] = useState<UnitKind>('main');
   const [assetTypeId, setAssetTypeId] = useState('');
   const [parentUnitId, setParentUnitId] = useState('');
@@ -164,6 +165,7 @@ export function UnitModal({
       }
 
       await onSave(payload);
+      await queryClient.invalidateQueries({ queryKey: ['unit-activity'] });
       onClose();
     } catch (err) {
       setError(
