@@ -3,10 +3,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.warehouseRouter = void 0;
 const express_1 = require("express");
 const auth_1 = require("../middleware/auth");
+const warehouseCommercial_1 = require("./warehouseCommercial");
 const warehouse_1 = require("../services/warehouse");
 const warehouse_2 = require("../schemas/warehouse");
 exports.warehouseRouter = (0, express_1.Router)();
 exports.warehouseRouter.use(auth_1.authenticate);
+exports.warehouseRouter.use(warehouseCommercial_1.warehouseCommercialRouter);
 exports.warehouseRouter.get('/', async (req, res, next) => {
     try {
         const search = req.query.search;

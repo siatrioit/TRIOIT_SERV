@@ -28,6 +28,9 @@ const clientSchema = zod_1.z.object({
     email: fields_1.optionalEmail,
     representative: fields_1.optionalString,
     notes: fields_1.optionalString,
+    is_supplier: zod_1.z.coerce.boolean().optional(),
+    is_buyer: zod_1.z.coerce.boolean().optional(),
+    is_service_client: zod_1.z.coerce.boolean().optional(),
 });
 const createClientSchema = clientSchema.extend({
     objects: zod_1.z.array(clientObject_1.clientObjectInputSchema).optional(),
@@ -41,8 +44,16 @@ exports.clientsRouter.get('/', async (req, res, next) => {
         const { page, limit, offset } = (0, pagination_1.parsePagination)(req.query);
         const search = req.query.search;
         const city = req.query.city;
+        const serviceOnly = req.query.service_only === '1' || req.query.service_only === 'true';
+        const warehouseOnly = req.query.warehouse === '1' || req.query.warehouse === 'true';
         let where = 'WHERE c.is_active = 1';
         const params = [];
+        if (serviceOnly) {
+            where += ' AND c.is_service_client = 1';
+        }
+        if (warehouseOnly) {
+            where += ' AND (c.is_supplier = 1 OR c.is_buyer = 1 OR c.is_service_client = 1)';
+        }
         if (search) {
             where += ` AND (
         c.name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?
@@ -105,9 +116,10 @@ exports.clientsRouter.post('/', (0, auth_1.authorize)('admin', 'manager', 'techn
         const id = (0, uuid_1.v4)();
         await (0, pool_1.query)(`INSERT INTO clients (id, name, client_type, registration_number, vat_number, address, city, postal_code, country,
 
-        latitude, longitude, phone, email, representative, notes, created_by)
+        latitude, longitude, phone, email, representative, notes,
+        is_supplier, is_buyer, is_service_client, created_by)
 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
             id,
             clientFields.name,
             clientFields.client_type,
@@ -123,6 +135,9 @@ exports.clientsRouter.post('/', (0, auth_1.authorize)('admin', 'manager', 'techn
             clientFields.email || null,
             clientFields.representative ?? null,
             clientFields.notes ?? null,
+            clientFields.is_supplier ? 1 : 0,
+            clientFields.is_buyer ? 1 : 0,
+            clientFields.is_service_client ? 1 : 0,
             req.user?.userId,
         ]);
         let savedObjects = [];

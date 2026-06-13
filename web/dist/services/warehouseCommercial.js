@@ -1,0 +1,316 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.listProductGroups = listProductGroups;
+exports.createProductGroup = createProductGroup;
+exports.updateProductGroup = updateProductGroup;
+exports.deleteProductGroup = deleteProductGroup;
+exports.listProducts = listProducts;
+exports.createProduct = createProduct;
+exports.updateProduct = updateProduct;
+exports.deleteProduct = deleteProduct;
+exports.listReceipts = listReceipts;
+exports.getReceipt = getReceipt;
+exports.createReceipt = createReceipt;
+exports.postReceipt = postReceipt;
+exports.listIssues = listIssues;
+exports.getIssue = getIssue;
+exports.createIssue = createIssue;
+exports.postIssue = postIssue;
+const uuid_1 = require("uuid");
+const pool_1 = require("../db/pool");
+const errorHandler_1 = require("../middleware/errorHandler");
+function docNumber(prefix) {
+    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+    return `${prefix}-${date}-${rand}`;
+}
+async function applyProductStockChange(conn, productId, delta, movementType, opts) {
+    const row = await (0, pool_1.queryOneConn)(conn, 'SELECT quantity_on_hand FROM warehouse_products WHERE id = ? AND is_active = 1 FOR UPDATE', [productId]);
+    if (!row)
+        throw new errorHandler_1.AppError(404, 'Prece nav atrasta', 'NOT_FOUND');
+    const after = Number(row.quantity_on_hand) + delta;
+    if (after < 0) {
+        throw new errorHandler_1.AppError(409, 'Nepietiekams preces atlikums', 'INSUFFICIENT_STOCK');
+    }
+    await (0, pool_1.queryConn)(conn, 'UPDATE warehouse_products SET quantity_on_hand = ? WHERE id = ?', [
+        after,
+        productId,
+    ]);
+    await (0, pool_1.queryConn)(conn, `INSERT INTO warehouse_product_movements (
+      id, product_id, movement_type, quantity, quantity_after,
+      reference_type, reference_id, notes, created_by
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+        (0, uuid_1.v4)(),
+        productId,
+        movementType,
+        Math.abs(delta),
+        after,
+        opts.referenceType ?? null,
+        opts.referenceId ?? null,
+        opts.notes ?? null,
+        opts.createdBy ?? null,
+    ]);
+    return after;
+}
+async function assertSupplier(clientId) {
+    const row = await (0, pool_1.queryOne)('SELECT id FROM clients WHERE id = ? AND is_active = 1 AND is_supplier = 1', [clientId]);
+    if (!row)
+        throw new errorHandler_1.AppError(400, 'Piegādātājs nav atrasts', 'INVALID_SUPPLIER');
+}
+async function assertBuyer(clientId) {
+    const row = await (0, pool_1.queryOne)('SELECT id FROM clients WHERE id = ? AND is_active = 1 AND is_buyer = 1', [clientId]);
+    if (!row)
+        throw new errorHandler_1.AppError(400, 'Pircējs nav atrasts', 'INVALID_BUYER');
+}
+async function listProductGroups() {
+    return (0, pool_1.query)(`SELECT g.*,
+      (SELECT COUNT(*) FROM warehouse_products p WHERE p.group_id = g.id AND p.is_active = 1) AS product_count
+     FROM warehouse_product_groups g
+     WHERE g.is_active = 1
+     ORDER BY g.sort_order ASC, g.name ASC`);
+}
+async function createProductGroup(input) {
+    const id = (0, uuid_1.v4)();
+    await (0, pool_1.query)(`INSERT INTO warehouse_product_groups (id, name, sort_order) VALUES (?, ?, ?)`, [id, input.name.trim(), input.sort_order ?? 0]);
+    const row = await (0, pool_1.queryOne)('SELECT * FROM warehouse_product_groups WHERE id = ?', [id]);
+    if (!row)
+        throw new errorHandler_1.AppError(500, 'Neizdevās izveidot grupu');
+    return row;
+}
+async function updateProductGroup(id, input) {
+    const existing = await (0, pool_1.queryOne)('SELECT id FROM warehouse_product_groups WHERE id = ? AND is_active = 1', [id]);
+    if (!existing)
+        throw new errorHandler_1.AppError(404, 'Grupa nav atrasta', 'NOT_FOUND');
+    const fields = [];
+    const values = [];
+    if (input.name !== undefined) {
+        fields.push('name = ?');
+        values.push(input.name.trim());
+    }
+    if (input.sort_order !== undefined) {
+        fields.push('sort_order = ?');
+        values.push(input.sort_order);
+    }
+    if (fields.length) {
+        await (0, pool_1.query)(`UPDATE warehouse_product_groups SET ${fields.join(', ')} WHERE id = ?`, [
+            ...values,
+            id,
+        ]);
+    }
+    const row = await (0, pool_1.queryOne)('SELECT * FROM warehouse_product_groups WHERE id = ?', [id]);
+    return row;
+}
+async function deleteProductGroup(id) {
+    const inUse = await (0, pool_1.queryOne)('SELECT COUNT(*) AS total FROM warehouse_products WHERE group_id = ? AND is_active = 1', [id]);
+    if ((inUse?.total ?? 0) > 0) {
+        throw new errorHandler_1.AppError(409, 'Grupā ir preces — vispirms pārvietojiet vai dzēsiet tās', 'HAS_PRODUCTS');
+    }
+    await (0, pool_1.query)('UPDATE warehouse_product_groups SET is_active = 0 WHERE id = ?', [id]);
+}
+async function listProducts(search, groupId) {
+    let sql = `SELECT p.*, g.name AS group_name
+             FROM warehouse_products p
+             LEFT JOIN warehouse_product_groups g ON g.id = p.group_id
+             WHERE p.is_active = 1`;
+    const params = [];
+    if (groupId) {
+        sql += ' AND p.group_id = ?';
+        params.push(groupId);
+    }
+    if (search?.trim()) {
+        sql += ' AND (p.name LIKE ? OR p.sku LIKE ? OR p.description LIKE ?)';
+        const term = `%${search.trim()}%`;
+        params.push(term, term, term);
+    }
+    sql += ' ORDER BY g.sort_order ASC, g.name ASC, p.name ASC';
+    return (0, pool_1.query)(sql, params);
+}
+async function createProduct(input, createdBy) {
+    const id = (0, uuid_1.v4)();
+    await (0, pool_1.query)(`INSERT INTO warehouse_products (
+      id, group_id, sku, name, description, unit, min_quantity, purchase_price, sale_price, created_by
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+        id,
+        input.group_id ?? null,
+        input.sku ?? null,
+        input.name.trim(),
+        input.description ?? null,
+        input.unit || 'gab',
+        input.min_quantity ?? null,
+        input.purchase_price ?? null,
+        input.sale_price ?? null,
+        createdBy ?? null,
+    ]);
+    const row = await (0, pool_1.queryOne)(`SELECT p.*, g.name AS group_name
+     FROM warehouse_products p
+     LEFT JOIN warehouse_product_groups g ON g.id = p.group_id
+     WHERE p.id = ?`, [id]);
+    if (!row)
+        throw new errorHandler_1.AppError(500, 'Neizdevās izveidot preci');
+    return row;
+}
+async function updateProduct(id, input) {
+    const existing = await (0, pool_1.queryOne)('SELECT id FROM warehouse_products WHERE id = ? AND is_active = 1', [id]);
+    if (!existing)
+        throw new errorHandler_1.AppError(404, 'Prece nav atrasta', 'NOT_FOUND');
+    const fields = [];
+    const values = [];
+    for (const key of [
+        'group_id',
+        'sku',
+        'name',
+        'description',
+        'unit',
+        'min_quantity',
+        'purchase_price',
+        'sale_price',
+    ]) {
+        if (input[key] !== undefined) {
+            fields.push(`${key} = ?`);
+            const v = input[key];
+            values.push(typeof v === 'string' ? v.trim() || null : v ?? null);
+        }
+    }
+    if (fields.length) {
+        await (0, pool_1.query)(`UPDATE warehouse_products SET ${fields.join(', ')} WHERE id = ?`, [...values, id]);
+    }
+    const row = await (0, pool_1.queryOne)(`SELECT p.*, g.name AS group_name
+     FROM warehouse_products p
+     LEFT JOIN warehouse_product_groups g ON g.id = p.group_id
+     WHERE p.id = ?`, [id]);
+    return row;
+}
+async function deleteProduct(id) {
+    await (0, pool_1.query)('UPDATE warehouse_products SET is_active = 0 WHERE id = ?', [id]);
+}
+async function loadReceiptLines(receiptId) {
+    return (0, pool_1.query)(`SELECT l.*, p.name AS product_name, p.sku AS product_sku
+     FROM warehouse_receipt_lines l
+     JOIN warehouse_products p ON p.id = l.product_id
+     WHERE l.receipt_id = ?
+     ORDER BY l.sort_order ASC, l.id ASC`, [receiptId]);
+}
+async function listReceipts() {
+    return (0, pool_1.query)(`SELECT r.*, c.name AS supplier_name
+     FROM warehouse_receipts r
+     JOIN clients c ON c.id = r.supplier_id
+     ORDER BY r.document_date DESC, r.created_at DESC`);
+}
+async function getReceipt(id) {
+    const row = await (0, pool_1.queryOne)(`SELECT r.*, c.name AS supplier_name
+     FROM warehouse_receipts r
+     JOIN clients c ON c.id = r.supplier_id
+     WHERE r.id = ?`, [id]);
+    if (!row)
+        return null;
+    row.lines = await loadReceiptLines(id);
+    return row;
+}
+async function createReceipt(input, createdBy) {
+    await assertSupplier(input.supplier_id);
+    const id = (0, uuid_1.v4)();
+    const documentNumber = docNumber('WH-IN');
+    await (0, pool_1.withMysqlTransaction)(async (conn) => {
+        await (0, pool_1.queryConn)(conn, `INSERT INTO warehouse_receipts (
+        id, document_number, supplier_id, document_date, status, notes, created_by
+      ) VALUES (?, ?, ?, ?, 'draft', ?, ?)`, [id, documentNumber, input.supplier_id, input.document_date, input.notes ?? null, createdBy ?? null]);
+        let sort = 0;
+        for (const line of input.lines) {
+            await (0, pool_1.queryConn)(conn, `INSERT INTO warehouse_receipt_lines (id, receipt_id, product_id, quantity, unit_price, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?)`, [(0, uuid_1.v4)(), id, line.product_id, line.quantity, line.unit_price ?? null, sort++]);
+        }
+    });
+    const receipt = await getReceipt(id);
+    if (!receipt)
+        throw new errorHandler_1.AppError(500, 'Neizdevās izveidot pavadzīmi');
+    return receipt;
+}
+async function postReceipt(id, createdBy) {
+    const receipt = await getReceipt(id);
+    if (!receipt)
+        throw new errorHandler_1.AppError(404, 'Pavadzīme nav atrasta', 'NOT_FOUND');
+    if (receipt.status !== 'draft') {
+        throw new errorHandler_1.AppError(409, 'Pavadzīme jau ir apstrādāta', 'INVALID_STATUS');
+    }
+    if (!receipt.lines?.length) {
+        throw new errorHandler_1.AppError(400, 'Pavadzīmei nav rindu', 'NO_LINES');
+    }
+    await (0, pool_1.withMysqlTransaction)(async (conn) => {
+        for (const line of receipt.lines) {
+            await applyProductStockChange(conn, line.product_id, line.quantity, 'in', {
+                referenceType: 'receipt',
+                referenceId: id,
+                notes: `Saņemšana ${receipt.document_number}`,
+                createdBy,
+            });
+        }
+        await (0, pool_1.queryConn)(conn, `UPDATE warehouse_receipts SET status = 'posted', posted_at = NOW() WHERE id = ?`, [id]);
+    });
+    return (await getReceipt(id));
+}
+async function loadIssueLines(issueId) {
+    return (0, pool_1.query)(`SELECT l.*, p.name AS product_name, p.sku AS product_sku
+     FROM warehouse_issue_lines l
+     JOIN warehouse_products p ON p.id = l.product_id
+     WHERE l.issue_id = ?
+     ORDER BY l.sort_order ASC, l.id ASC`, [issueId]);
+}
+async function listIssues() {
+    return (0, pool_1.query)(`SELECT i.*, c.name AS buyer_name
+     FROM warehouse_issues i
+     JOIN clients c ON c.id = i.buyer_id
+     ORDER BY i.document_date DESC, i.created_at DESC`);
+}
+async function getIssue(id) {
+    const row = await (0, pool_1.queryOne)(`SELECT i.*, c.name AS buyer_name
+     FROM warehouse_issues i
+     JOIN clients c ON c.id = i.buyer_id
+     WHERE i.id = ?`, [id]);
+    if (!row)
+        return null;
+    row.lines = await loadIssueLines(id);
+    return row;
+}
+async function createIssue(input, createdBy) {
+    await assertBuyer(input.buyer_id);
+    const id = (0, uuid_1.v4)();
+    const documentNumber = docNumber('WH-OUT');
+    await (0, pool_1.withMysqlTransaction)(async (conn) => {
+        await (0, pool_1.queryConn)(conn, `INSERT INTO warehouse_issues (
+        id, document_number, buyer_id, document_date, status, notes, created_by
+      ) VALUES (?, ?, ?, ?, 'draft', ?, ?)`, [id, documentNumber, input.buyer_id, input.document_date, input.notes ?? null, createdBy ?? null]);
+        let sort = 0;
+        for (const line of input.lines) {
+            await (0, pool_1.queryConn)(conn, `INSERT INTO warehouse_issue_lines (id, issue_id, product_id, quantity, unit_price, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?)`, [(0, uuid_1.v4)(), id, line.product_id, line.quantity, line.unit_price ?? null, sort++]);
+        }
+    });
+    const issue = await getIssue(id);
+    if (!issue)
+        throw new errorHandler_1.AppError(500, 'Neizdevās izveidot pavadzīmi');
+    return issue;
+}
+async function postIssue(id, createdBy) {
+    const issue = await getIssue(id);
+    if (!issue)
+        throw new errorHandler_1.AppError(404, 'Pavadzīme nav atrasta', 'NOT_FOUND');
+    if (issue.status !== 'draft') {
+        throw new errorHandler_1.AppError(409, 'Pavadzīme jau ir apstrādāta', 'INVALID_STATUS');
+    }
+    if (!issue.lines?.length) {
+        throw new errorHandler_1.AppError(400, 'Pavadzīmei nav rindu', 'NO_LINES');
+    }
+    await (0, pool_1.withMysqlTransaction)(async (conn) => {
+        for (const line of issue.lines) {
+            await applyProductStockChange(conn, line.product_id, -line.quantity, 'out', {
+                referenceType: 'issue',
+                referenceId: id,
+                notes: `Izrakstīšana ${issue.document_number}`,
+                createdBy,
+            });
+        }
+        await (0, pool_1.queryConn)(conn, `UPDATE warehouse_issues SET status = 'posted', posted_at = NOW() WHERE id = ?`, [id]);
+    });
+    return (await getIssue(id));
+}
+//# sourceMappingURL=warehouseCommercial.js.map
