@@ -12,7 +12,11 @@ exports.listProductMovements = listProductMovements;
 exports.listReceipts = listReceipts;
 exports.getReceipt = getReceipt;
 exports.createReceipt = createReceipt;
+exports.updateReceipt = updateReceipt;
+exports.updateReceiptLines = updateReceiptLines;
 exports.postReceipt = postReceipt;
+exports.unpostReceipt = unpostReceipt;
+exports.payReceipt = payReceipt;
 exports.listIssues = listIssues;
 exports.getIssue = getIssue;
 exports.createIssue = createIssue;
@@ -20,6 +24,7 @@ exports.postIssue = postIssue;
 const uuid_1 = require("uuid");
 const pool_1 = require("../db/pool");
 const errorHandler_1 = require("../middleware/errorHandler");
+const warehousePricing_1 = require("../utils/warehousePricing");
 function docNumber(prefix) {
     const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
@@ -157,7 +162,7 @@ async function deleteProductGroup(id) {
     }
     await (0, pool_1.query)('UPDATE warehouse_product_groups SET is_active = 0 WHERE id = ?', [id]);
 }
-async function listProducts(search, groupId) {
+async function listProducts(search, groupId, exactGroup) {
     let sql = `SELECT p.*,
                     g.name AS group_name,
                     pg.name AS subgroup_name,
@@ -171,15 +176,21 @@ async function listProducts(search, groupId) {
              WHERE p.is_active = 1`;
     const params = [];
     if (groupId) {
-        sql += ` AND (p.group_id = ? OR p.group_id IN (
-      SELECT id FROM warehouse_product_groups WHERE parent_id = ? AND is_active = 1
-    ))`;
-        params.push(groupId, groupId);
+        if (exactGroup) {
+            sql += ' AND p.group_id = ?';
+            params.push(groupId);
+        }
+        else {
+            sql += ` AND (p.group_id = ? OR p.group_id IN (
+        SELECT id FROM warehouse_product_groups WHERE parent_id = ? AND is_active = 1
+      ))`;
+            params.push(groupId, groupId);
+        }
     }
     if (search?.trim()) {
-        sql += ' AND (p.name LIKE ? OR p.sku LIKE ? OR p.description LIKE ?)';
+        sql += ' AND (p.name LIKE ? OR p.secondary_name LIKE ? OR p.sku LIKE ? OR p.description LIKE ?)';
         const term = `%${search.trim()}%`;
-        params.push(term, term, term);
+        params.push(term, term, term, term);
     }
     sql += ' ORDER BY pg.sort_order ASC, pg.name ASC, g.sort_order ASC, g.name ASC, p.name ASC';
     return (0, pool_1.query)(sql, params);
@@ -187,17 +198,20 @@ async function listProducts(search, groupId) {
 async function createProduct(input, createdBy) {
     const id = (0, uuid_1.v4)();
     await (0, pool_1.query)(`INSERT INTO warehouse_products (
-      id, group_id, sku, name, description, unit, min_quantity, purchase_price, sale_price, is_service, created_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+      id, group_id, sku, name, secondary_name, description, unit, min_quantity,
+      purchase_price, sale_price, vat_rate, is_service, created_by
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
         id,
         input.group_id ?? null,
         input.sku ?? null,
         input.name.trim(),
+        input.secondary_name?.trim() || null,
         input.description ?? null,
         input.unit || 'gab',
         input.min_quantity ?? null,
         input.purchase_price ?? null,
         input.sale_price ?? null,
+        input.vat_rate ?? 21,
         input.is_service ? 1 : 0,
         createdBy ?? null,
     ]);
@@ -226,11 +240,13 @@ async function updateProduct(id, input) {
         'group_id',
         'sku',
         'name',
+        'secondary_name',
         'description',
         'unit',
         'min_quantity',
         'purchase_price',
         'sale_price',
+        'vat_rate',
         'is_service',
     ]) {
         if (input[key] !== undefined) {
@@ -238,6 +254,9 @@ async function updateProduct(id, input) {
             const v = input[key];
             if (key === 'is_service') {
                 values.push(v ? 1 : 0);
+            }
+            else if (key === 'secondary_name') {
+                values.push(typeof v === 'string' ? v.trim() || null : v ?? null);
             }
             else {
                 values.push(typeof v === 'string' ? v.trim() || null : v ?? null);
@@ -293,11 +312,33 @@ async function listProductMovements(opts) {
      LIMIT ?`, [...params, limit]);
 }
 async function loadReceiptLines(receiptId) {
-    return (0, pool_1.query)(`SELECT l.*, p.name AS product_name, p.sku AS product_sku, p.unit AS product_unit
+    return (0, pool_1.query)(`SELECT l.*,
+            p.name AS product_name,
+            p.secondary_name AS product_secondary_name,
+            p.sku AS product_sku,
+            p.unit AS product_unit,
+            p.vat_rate AS product_vat_rate
      FROM warehouse_receipt_lines l
      JOIN warehouse_products p ON p.id = l.product_id
      WHERE l.receipt_id = ?
      ORDER BY l.sort_order ASC, l.id ASC`, [receiptId]);
+}
+function enrichReceiptTotals(receipt) {
+    const pricingLines = (receipt.lines ?? []).map((line) => ({
+        quantity: Number(line.quantity),
+        purchase_price_ex_vat: Number(line.unit_price ?? 0),
+        sale_price_ex_vat: Number(line.sale_price ?? 0),
+        vat_rate: Number(line.product_vat_rate ?? 21),
+    }));
+    const totals = (0, warehousePricing_1.calcReceiptTotals)(pricingLines);
+    receipt.total_purchase_ex_vat = totals.purchase_ex_vat;
+    receipt.total_vat = totals.vat_amount;
+    receipt.total_purchase_inc_vat = totals.purchase_inc_vat;
+    receipt.total_sale_inc_vat = totals.sale_inc_vat;
+    const payment = (0, warehousePricing_1.calcPaymentStatus)(Number(receipt.amount_paid ?? 0), totals.purchase_inc_vat);
+    receipt.payment_status = payment.status;
+    receipt.amount_remaining = payment.remaining;
+    return receipt;
 }
 const RECEIPT_SELECT = `
   SELECT r.*,
@@ -308,45 +349,128 @@ const RECEIPT_SELECT = `
   FROM warehouse_receipts r
   JOIN clients c ON c.id = r.supplier_id
 `;
-async function listReceipts() {
-    return (0, pool_1.query)(`${RECEIPT_SELECT}
-     ORDER BY r.document_date DESC, r.created_at DESC`);
+async function listReceipts(opts) {
+    let sql = `${RECEIPT_SELECT} WHERE 1=1`;
+    const params = [];
+    if (opts?.supplierId) {
+        sql += ' AND r.supplier_id = ?';
+        params.push(opts.supplierId);
+    }
+    const sortBy = opts?.sortBy === 'supplier' ? 'c.name' : 'r.document_date';
+    const sortDir = opts?.sortDir === 'asc' ? 'ASC' : 'DESC';
+    sql += ` ORDER BY ${sortBy} ${sortDir}, r.created_at DESC`;
+    const rows = await (0, pool_1.query)(sql, params);
+    const enriched = await Promise.all(rows.map(async (row) => {
+        row.lines = await loadReceiptLines(row.id);
+        return enrichReceiptTotals(row);
+    }));
+    if (opts?.unpaidOnly) {
+        return enriched.filter((r) => r.payment_status !== 'paid');
+    }
+    return enriched;
 }
 async function getReceipt(id) {
     const row = await (0, pool_1.queryOne)(`${RECEIPT_SELECT} WHERE r.id = ?`, [id]);
     if (!row)
         return null;
     row.lines = await loadReceiptLines(id);
-    return row;
+    return enrichReceiptTotals(row);
+}
+async function assertReceiptEditable(receipt) {
+    if (receipt.status !== 'draft') {
+        throw new errorHandler_1.AppError(409, 'Pavadzīmi var labot tikai melnraksta statusā', 'INVALID_STATUS');
+    }
 }
 async function createReceipt(input, createdBy) {
     await assertSupplier(input.supplier_id);
     const id = (0, uuid_1.v4)();
     const documentNumber = docNumber('WH-IN');
-    await (0, pool_1.withMysqlTransaction)(async (conn) => {
-        await (0, pool_1.queryConn)(conn, `INSERT INTO warehouse_receipts (
-        id, document_number, supplier_id, supplier_document_number, document_date,
-        status, operation_description, notes, created_by
-      ) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?)`, [
-            id,
-            documentNumber,
-            input.supplier_id,
-            input.supplier_document_number?.trim() || null,
-            input.document_date,
-            input.operation_description?.trim() || null,
-            input.notes ?? null,
-            createdBy ?? null,
-        ]);
-        let sort = 0;
-        for (const line of input.lines) {
-            await (0, pool_1.queryConn)(conn, `INSERT INTO warehouse_receipt_lines (id, receipt_id, product_id, quantity, unit_price, sort_order)
-         VALUES (?, ?, ?, ?, ?, ?)`, [(0, uuid_1.v4)(), id, line.product_id, line.quantity, line.unit_price ?? null, sort++]);
-        }
-    });
+    await (0, pool_1.query)(`INSERT INTO warehouse_receipts (
+      id, document_number, supplier_id, supplier_document_number, document_date,
+      status, operation_description, notes, created_by
+    ) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?)`, [
+        id,
+        documentNumber,
+        input.supplier_id,
+        input.supplier_document_number?.trim() || null,
+        input.document_date,
+        input.operation_description?.trim() || null,
+        input.notes ?? null,
+        createdBy ?? null,
+    ]);
     const receipt = await getReceipt(id);
     if (!receipt)
         throw new errorHandler_1.AppError(500, 'Neizdevās izveidot pavadzīmi');
     return receipt;
+}
+async function updateReceipt(id, input) {
+    const receipt = await getReceipt(id);
+    if (!receipt)
+        throw new errorHandler_1.AppError(404, 'Pavadzīme nav atrasta', 'NOT_FOUND');
+    await assertReceiptEditable(receipt);
+    if (input.supplier_id)
+        await assertSupplier(input.supplier_id);
+    const fields = [];
+    const values = [];
+    if (input.supplier_id !== undefined) {
+        fields.push('supplier_id = ?');
+        values.push(input.supplier_id);
+    }
+    if (input.supplier_document_number !== undefined) {
+        fields.push('supplier_document_number = ?');
+        values.push(input.supplier_document_number?.trim() || null);
+    }
+    if (input.document_date !== undefined) {
+        fields.push('document_date = ?');
+        values.push(input.document_date);
+    }
+    if (input.operation_description !== undefined) {
+        fields.push('operation_description = ?');
+        values.push(input.operation_description?.trim() || null);
+    }
+    if (input.notes !== undefined) {
+        fields.push('notes = ?');
+        values.push(input.notes ?? null);
+    }
+    if (fields.length) {
+        await (0, pool_1.query)(`UPDATE warehouse_receipts SET ${fields.join(', ')} WHERE id = ?`, [...values, id]);
+    }
+    return (await getReceipt(id));
+}
+async function updateReceiptLines(id, lines) {
+    const receipt = await getReceipt(id);
+    if (!receipt)
+        throw new errorHandler_1.AppError(404, 'Pavadzīme nav atrasta', 'NOT_FOUND');
+    await assertReceiptEditable(receipt);
+    await (0, pool_1.withMysqlTransaction)(async (conn) => {
+        await (0, pool_1.queryConn)(conn, 'DELETE FROM warehouse_receipt_lines WHERE receipt_id = ?', [id]);
+        let sort = 0;
+        for (const line of lines) {
+            await (0, pool_1.queryConn)(conn, `INSERT INTO warehouse_receipt_lines (
+          id, receipt_id, product_id, quantity, unit_price, markup_percent, sale_price, sort_order
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [
+                (0, uuid_1.v4)(),
+                id,
+                line.product_id,
+                line.quantity,
+                line.purchase_price ?? null,
+                line.markup_percent ?? null,
+                line.sale_price ?? null,
+                sort++,
+            ]);
+        }
+    });
+    return (await getReceipt(id));
+}
+async function syncProductPricesFromReceiptLines(conn, lines) {
+    for (const line of lines) {
+        if (line.unit_price == null && line.sale_price == null)
+            continue;
+        await (0, pool_1.queryConn)(conn, `UPDATE warehouse_products
+       SET purchase_price = COALESCE(?, purchase_price),
+           sale_price = COALESCE(?, sale_price)
+       WHERE id = ?`, [line.unit_price ?? null, line.sale_price ?? null, line.product_id]);
+    }
 }
 async function postReceipt(id, createdBy) {
     const receipt = await getReceipt(id);
@@ -367,8 +491,50 @@ async function postReceipt(id, createdBy) {
                 createdBy,
             });
         }
+        await syncProductPricesFromReceiptLines(conn, receipt.lines);
         await (0, pool_1.queryConn)(conn, `UPDATE warehouse_receipts SET status = 'posted', posted_at = NOW() WHERE id = ?`, [id]);
     });
+    return (await getReceipt(id));
+}
+async function unpostReceipt(id, createdBy) {
+    const receipt = await getReceipt(id);
+    if (!receipt)
+        throw new errorHandler_1.AppError(404, 'Pavadzīme nav atrasta', 'NOT_FOUND');
+    if (receipt.status !== 'posted') {
+        throw new errorHandler_1.AppError(409, 'Atcelt grāmatošanu var tikai grāmatotai pavadzīmei', 'INVALID_STATUS');
+    }
+    if (!receipt.lines?.length) {
+        throw new errorHandler_1.AppError(400, 'Pavadzīmei nav rindu', 'NO_LINES');
+    }
+    await (0, pool_1.withMysqlTransaction)(async (conn) => {
+        for (const line of receipt.lines) {
+            await applyProductStockChange(conn, line.product_id, -line.quantity, 'out', {
+                referenceType: 'receipt',
+                referenceId: id,
+                notes: `Atcelta saņemšana ${receipt.document_number}`,
+                createdBy,
+            });
+        }
+        await (0, pool_1.queryConn)(conn, `UPDATE warehouse_receipts SET status = 'draft', posted_at = NULL WHERE id = ?`, [id]);
+    });
+    return (await getReceipt(id));
+}
+async function payReceipt(id, amount) {
+    const receipt = await getReceipt(id);
+    if (!receipt)
+        throw new errorHandler_1.AppError(404, 'Pavadzīme nav atrasta', 'NOT_FOUND');
+    if (receipt.status !== 'posted') {
+        throw new errorHandler_1.AppError(409, 'Apmaksāt var tikai grāmatotu pavadzīmi', 'INVALID_STATUS');
+    }
+    const due = Number(receipt.total_purchase_inc_vat ?? 0);
+    if (due <= 0) {
+        throw new errorHandler_1.AppError(400, 'Pavadzīmei nav summas apmaksai', 'NO_AMOUNT');
+    }
+    const paid = (0, warehousePricing_1.roundMoney)(Number(receipt.amount_paid ?? 0) + amount);
+    if (paid > due + 0.001) {
+        throw new errorHandler_1.AppError(400, 'Apmaksas summa pārsniedz pavadzīmes summu', 'OVERPAYMENT');
+    }
+    await (0, pool_1.query)('UPDATE warehouse_receipts SET amount_paid = ? WHERE id = ?', [paid, id]);
     return (await getReceipt(id));
 }
 async function loadIssueLines(issueId) {

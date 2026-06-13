@@ -47,7 +47,8 @@ exports.warehouseCommercialRouter.get('/products', async (req, res, next) => {
     try {
         const search = req.query.search;
         const groupId = req.query.group_id;
-        res.json({ data: await (0, warehouseCommercial_1.listProducts)(search, groupId) });
+        const exactGroup = req.query.exact === '1' || req.query.exact === 'true';
+        res.json({ data: await (0, warehouseCommercial_1.listProducts)(search, groupId, exactGroup) });
     }
     catch (err) {
         next(err);
@@ -96,9 +97,15 @@ exports.warehouseCommercialRouter.get('/journal/movements', async (req, res, nex
         next(err);
     }
 });
-exports.warehouseCommercialRouter.get('/receipts', async (_req, res, next) => {
+exports.warehouseCommercialRouter.get('/receipts', async (req, res, next) => {
     try {
-        res.json({ data: await (0, warehouseCommercial_1.listReceipts)() });
+        const supplierId = req.query.supplier_id;
+        const unpaidOnly = req.query.unpaid_only === '1' || req.query.unpaid_only === 'true';
+        const sortBy = req.query.sort_by === 'supplier' ? 'supplier' : 'date';
+        const sortDir = req.query.sort_dir === 'asc' ? 'asc' : 'desc';
+        res.json({
+            data: await (0, warehouseCommercial_1.listReceipts)({ supplierId, unpaidOnly, sortBy, sortDir }),
+        });
     }
     catch (err) {
         next(err);
@@ -119,8 +126,26 @@ exports.warehouseCommercialRouter.get('/receipts/:id', async (req, res, next) =>
 });
 exports.warehouseCommercialRouter.post('/receipts', canEdit, async (req, res, next) => {
     try {
-        const body = warehouseCommercial_2.receiptInputSchema.parse(req.body);
+        const body = warehouseCommercial_2.receiptHeaderInputSchema.parse(req.body);
         res.status(201).json({ data: await (0, warehouseCommercial_1.createReceipt)(body, req.user?.userId) });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+exports.warehouseCommercialRouter.put('/receipts/:id', canEdit, async (req, res, next) => {
+    try {
+        const body = warehouseCommercial_2.receiptHeaderInputSchema.partial().parse(req.body);
+        res.json({ data: await (0, warehouseCommercial_1.updateReceipt)(req.params.id, body) });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+exports.warehouseCommercialRouter.put('/receipts/:id/lines', canEdit, async (req, res, next) => {
+    try {
+        const body = warehouseCommercial_2.receiptLinesInputSchema.parse(req.body);
+        res.json({ data: await (0, warehouseCommercial_1.updateReceiptLines)(req.params.id, body.lines) });
     }
     catch (err) {
         next(err);
@@ -129,6 +154,23 @@ exports.warehouseCommercialRouter.post('/receipts', canEdit, async (req, res, ne
 exports.warehouseCommercialRouter.post('/receipts/:id/post', canEdit, async (req, res, next) => {
     try {
         res.json({ data: await (0, warehouseCommercial_1.postReceipt)(req.params.id, req.user?.userId) });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+exports.warehouseCommercialRouter.post('/receipts/:id/unpost', canEdit, async (req, res, next) => {
+    try {
+        res.json({ data: await (0, warehouseCommercial_1.unpostReceipt)(req.params.id, req.user?.userId) });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+exports.warehouseCommercialRouter.post('/receipts/:id/pay', canEdit, async (req, res, next) => {
+    try {
+        const body = warehouseCommercial_2.receiptPaymentInputSchema.parse(req.body);
+        res.json({ data: await (0, warehouseCommercial_1.payReceipt)(req.params.id, body.amount) });
     }
     catch (err) {
         next(err);
