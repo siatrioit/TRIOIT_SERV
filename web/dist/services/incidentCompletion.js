@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -11,7 +44,6 @@ exports.getCompletionActPdfPath = getCompletionActPdfPath;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const uuid_1 = require("uuid");
-const pdfkit_1 = __importDefault(require("pdfkit"));
 const pool_1 = require("../db/pool");
 const errorHandler_1 = require("../middleware/errorHandler");
 const incidentWork_1 = require("./incidentWork");
@@ -169,128 +201,131 @@ async function buildPdf(incident, completion, workLogs, materials) {
     const regular = fontPath('DejaVuSans.ttf');
     const bold = fontPath('DejaVuSans-Bold.ttf');
     await new Promise((resolve, reject) => {
-        const doc = new pdfkit_1.default({ size: 'A4', margin: 50 });
-        const stream = fs_1.default.createWriteStream(filePath);
-        doc.pipe(stream);
-        doc.registerFont('Regular', regular);
-        doc.registerFont('Bold', bold);
-        const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-        doc.font('Bold').fontSize(16).text('TRIO SERV', { align: 'center' });
-        doc.moveDown(0.3);
-        doc.fontSize(13).text('Remonta darbu izpildes un pieņemšanas-nodošanas akts', {
-            align: 'center',
-        });
-        doc.moveDown(0.8);
-        doc.font('Regular').fontSize(10);
-        doc.text(`Akts Nr.: ${actNumber}`, { align: 'right' });
-        doc.text(`Datums: ${formatLvDate(new Date())}`, { align: 'right' });
-        doc.moveDown(1);
-        const infoRows = [
-            ['Atgadījums', incident.incident_number],
-            ['Nosaukums', incident.title],
-            ['Klients', incident.client_name],
-        ];
-        if (incident.object_name)
-            infoRows.push(['Objekts', incident.object_name]);
-        if (incident.object_address)
-            infoRows.push(['Adrese', incident.object_address]);
-        const device = [incident.asset_type_name, incident.unit_model, incident.unit_serial]
-            .filter(Boolean)
-            .join(' · ');
-        if (device)
-            infoRows.push(['Ierīce', device]);
-        if (incident.assigned_user_name)
-            infoRows.push(['Izpildītājs', incident.assigned_user_name]);
-        infoRows.push(['Saņemts', formatLvDate(incident.received_at)]);
-        for (const [label, value] of infoRows) {
-            doc.font('Bold').text(`${label}: `, { continued: true });
-            doc.font('Regular').text(value || '—');
-        }
-        doc.moveDown(0.8);
-        doc.font('Bold').fontSize(11).text('1. Veiktie darbi');
-        doc.moveDown(0.3);
-        doc.font('Regular').fontSize(10);
-        if (workLogs.length === 0) {
-            doc.text('Darbu žurnālā nav detalizētu ierakstu.');
-        }
-        else {
-            workLogs.forEach((log, index) => {
-                doc.text(`${index + 1}. ${formatLvDate(log.work_date)} — ${log.description} (${formatDuration(log.duration_minutes)}${log.user_name ? `, ${log.user_name}` : ''})`);
+        void (async () => {
+            const { default: PDFDocument } = await Promise.resolve().then(() => __importStar(require('pdfkit')));
+            const doc = new PDFDocument({ size: 'A4', margin: 50 });
+            const stream = fs_1.default.createWriteStream(filePath);
+            doc.pipe(stream);
+            doc.registerFont('Regular', regular);
+            doc.registerFont('Bold', bold);
+            const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+            doc.font('Bold').fontSize(16).text('TRIO SERV', { align: 'center' });
+            doc.moveDown(0.3);
+            doc.fontSize(13).text('Remonta darbu izpildes un pieņemšanas-nodošanas akts', {
+                align: 'center',
             });
-        }
-        if (incident.resolution) {
-            doc.moveDown(0.5);
-            doc.font('Bold').text('Risinājuma kopsavilkums:');
-            doc.font('Regular').text(incident.resolution);
-        }
-        doc.moveDown(0.8);
-        doc.font('Bold').fontSize(11).text('2. Izmantotie materiāli');
-        doc.moveDown(0.3);
-        doc.font('Regular').fontSize(10);
-        if (materials.length === 0) {
-            doc.text('Materiāli nav reģistrēti.');
-        }
-        else {
-            materials.forEach((m) => {
-                doc.text(`• ${m.item_name} — ${m.quantity} ${m.item_unit ?? 'gab.'}`);
-            });
-        }
-        doc.moveDown(1);
-        doc.font('Bold').fontSize(11).text('3. Pušu apliecinājums');
-        doc.moveDown(0.4);
-        doc.font('Regular').fontSize(10).text('Izpildītājs apliecina, ka remonta darbi ir veikti pilnā apjomā un atbilstoši noteiktajam ' +
-            'apjomam. Pasūtītājs (klients) apliecina darbu pieņemšanu bez iebildumiem un apstiprina, ' +
-            'ka ierīce ir nodota ekspluatācijā.', { align: 'justify' });
-        doc.moveDown(1.2);
-        const colWidth = pageWidth / 2 - 10;
-        const yStart = doc.y;
-        doc.font('Bold').fontSize(10).text('Izpildītājs', doc.page.margins.left, yStart, {
-            width: colWidth,
-        });
-        doc.text('Pasūtītājs (klients)', doc.page.margins.left + colWidth + 20, yStart, {
-            width: colWidth,
-        });
-        const sigY = yStart + 18;
-        doc.font('Regular').fontSize(9);
-        doc.text(incident.assigned_user_name || 'TRIO SERV', doc.page.margins.left, sigY, {
-            width: colWidth,
-        });
-        const clientX = doc.page.margins.left + colWidth + 20;
-        const sigImage = parseSignatureImage(completion.signature_data);
-        if (sigImage && completion.signature_type === 'drawn') {
-            try {
-                doc.image(sigImage, clientX, sigY - 5, { width: 140, height: 50 });
+            doc.moveDown(0.8);
+            doc.font('Regular').fontSize(10);
+            doc.text(`Akts Nr.: ${actNumber}`, { align: 'right' });
+            doc.text(`Datums: ${formatLvDate(new Date())}`, { align: 'right' });
+            doc.moveDown(1);
+            const infoRows = [
+                ['Atgadījums', incident.incident_number],
+                ['Nosaukums', incident.title],
+                ['Klients', incident.client_name],
+            ];
+            if (incident.object_name)
+                infoRows.push(['Objekts', incident.object_name]);
+            if (incident.object_address)
+                infoRows.push(['Adrese', incident.object_address]);
+            const device = [incident.asset_type_name, incident.unit_model, incident.unit_serial]
+                .filter(Boolean)
+                .join(' · ');
+            if (device)
+                infoRows.push(['Ierīce', device]);
+            if (incident.assigned_user_name)
+                infoRows.push(['Izpildītājs', incident.assigned_user_name]);
+            infoRows.push(['Saņemts', formatLvDate(incident.received_at)]);
+            for (const [label, value] of infoRows) {
+                doc.font('Bold').text(`${label}: `, { continued: true });
+                doc.font('Regular').text(value || '—');
             }
-            catch {
-                doc.text(completion.client_signer_name || '—', clientX, sigY, { width: colWidth });
+            doc.moveDown(0.8);
+            doc.font('Bold').fontSize(11).text('1. Veiktie darbi');
+            doc.moveDown(0.3);
+            doc.font('Regular').fontSize(10);
+            if (workLogs.length === 0) {
+                doc.text('Darbu žurnālā nav detalizētu ierakstu.');
             }
-        }
-        else {
-            doc.font('Regular').fontSize(14).text(completion.client_signer_name || '—', clientX, sigY, {
+            else {
+                workLogs.forEach((log, index) => {
+                    doc.text(`${index + 1}. ${formatLvDate(log.work_date)} — ${log.description} (${formatDuration(log.duration_minutes)}${log.user_name ? `, ${log.user_name}` : ''})`);
+                });
+            }
+            if (incident.resolution) {
+                doc.moveDown(0.5);
+                doc.font('Bold').text('Risinājuma kopsavilkums:');
+                doc.font('Regular').text(incident.resolution);
+            }
+            doc.moveDown(0.8);
+            doc.font('Bold').fontSize(11).text('2. Izmantotie materiāli');
+            doc.moveDown(0.3);
+            doc.font('Regular').fontSize(10);
+            if (materials.length === 0) {
+                doc.text('Materiāli nav reģistrēti.');
+            }
+            else {
+                materials.forEach((m) => {
+                    doc.text(`• ${m.item_name} — ${m.quantity} ${m.item_unit ?? 'gab.'}`);
+                });
+            }
+            doc.moveDown(1);
+            doc.font('Bold').fontSize(11).text('3. Pušu apliecinājums');
+            doc.moveDown(0.4);
+            doc.font('Regular').fontSize(10).text('Izpildītājs apliecina, ka remonta darbi ir veikti pilnā apjomā un atbilstoši noteiktajam ' +
+                'apjomam. Pasūtītājs (klients) apliecina darbu pieņemšanu bez iebildumiem un apstiprina, ' +
+                'ka ierīce ir nodota ekspluatācijā.', { align: 'justify' });
+            doc.moveDown(1.2);
+            const colWidth = pageWidth / 2 - 10;
+            const yStart = doc.y;
+            doc.font('Bold').fontSize(10).text('Izpildītājs', doc.page.margins.left, yStart, {
                 width: colWidth,
             });
-        }
-        const lineY = sigY + 55;
-        doc.moveTo(doc.page.margins.left, lineY).lineTo(doc.page.margins.left + colWidth, lineY).stroke();
-        doc
-            .moveTo(clientX, lineY)
-            .lineTo(clientX + colWidth, lineY)
-            .stroke();
-        doc.font('Regular').fontSize(8);
-        doc.text('Paraksts / vārds', doc.page.margins.left, lineY + 4, { width: colWidth });
-        doc.text('Paraksts / vārds', clientX, lineY + 4, { width: colWidth });
-        const dateY = lineY + 20;
-        doc.fontSize(9).text(`Datums: ${formatLvDate(completion.client_signed_at)}`, clientX, dateY, {
-            width: colWidth,
-        });
-        doc.text(`Datums: ${formatLvDate(new Date())}`, doc.page.margins.left, dateY, {
-            width: colWidth,
-        });
-        doc.moveDown(2);
-        doc.fontSize(8).fillColor('#666666').text('Šis akts ir sagatavots elektroniski TRIO SERV sistēmā un ir derīgs bez papildu paraksta, ja ir reģistrēts klienta elektroniskais apstiprinājums.', { align: 'center' });
-        doc.end();
-        stream.on('finish', () => resolve());
-        stream.on('error', reject);
+            doc.text('Pasūtītājs (klients)', doc.page.margins.left + colWidth + 20, yStart, {
+                width: colWidth,
+            });
+            const sigY = yStart + 18;
+            doc.font('Regular').fontSize(9);
+            doc.text(incident.assigned_user_name || 'TRIO SERV', doc.page.margins.left, sigY, {
+                width: colWidth,
+            });
+            const clientX = doc.page.margins.left + colWidth + 20;
+            const sigImage = parseSignatureImage(completion.signature_data);
+            if (sigImage && completion.signature_type === 'drawn') {
+                try {
+                    doc.image(sigImage, clientX, sigY - 5, { width: 140, height: 50 });
+                }
+                catch {
+                    doc.text(completion.client_signer_name || '—', clientX, sigY, { width: colWidth });
+                }
+            }
+            else {
+                doc.font('Regular').fontSize(14).text(completion.client_signer_name || '—', clientX, sigY, {
+                    width: colWidth,
+                });
+            }
+            const lineY = sigY + 55;
+            doc.moveTo(doc.page.margins.left, lineY).lineTo(doc.page.margins.left + colWidth, lineY).stroke();
+            doc
+                .moveTo(clientX, lineY)
+                .lineTo(clientX + colWidth, lineY)
+                .stroke();
+            doc.font('Regular').fontSize(8);
+            doc.text('Paraksts / vārds', doc.page.margins.left, lineY + 4, { width: colWidth });
+            doc.text('Paraksts / vārds', clientX, lineY + 4, { width: colWidth });
+            const dateY = lineY + 20;
+            doc.fontSize(9).text(`Datums: ${formatLvDate(completion.client_signed_at)}`, clientX, dateY, {
+                width: colWidth,
+            });
+            doc.text(`Datums: ${formatLvDate(new Date())}`, doc.page.margins.left, dateY, {
+                width: colWidth,
+            });
+            doc.moveDown(2);
+            doc.fontSize(8).fillColor('#666666').text('Šis akts ir sagatavots elektroniski TRIO SERV sistēmā un ir derīgs bez papildu paraksta, ja ir reģistrēts klienta elektroniskais apstiprinājums.', { align: 'center' });
+            doc.end();
+            stream.on('finish', () => resolve());
+            stream.on('error', reject);
+        })().catch(reject);
     });
     return filePath;
 }

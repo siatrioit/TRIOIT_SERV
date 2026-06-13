@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import PDFDocument from 'pdfkit';
 import { query, queryOne } from '../db/pool';
 import { AppError } from '../middleware/errorHandler';
 import { listIncidentMaterials, listWorkLogs } from './incidentWork';
@@ -260,7 +259,9 @@ async function buildPdf(
   const bold = fontPath('DejaVuSans-Bold.ttf');
 
   await new Promise<void>((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    void (async () => {
+      const { default: PDFDocument } = await import('pdfkit');
+      const doc = new PDFDocument({ size: 'A4', margin: 50 });
     const stream = fs.createWriteStream(filePath);
     doc.pipe(stream);
 
@@ -402,6 +403,7 @@ async function buildPdf(
     doc.end();
     stream.on('finish', () => resolve());
     stream.on('error', reject);
+    })().catch(reject);
   });
 
   return filePath;
