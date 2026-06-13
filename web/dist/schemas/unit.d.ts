@@ -4,6 +4,7 @@ export declare const unitInputSchema: z.ZodEffects<z.ZodObject<{
     asset_type_id: z.ZodOptional<z.ZodString>;
     unit_type: z.ZodOptional<z.ZodString>;
     asset_component_id: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+    parent_unit_id: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     serial_number: z.ZodString;
     model: z.ZodEffects<z.ZodOptional<z.ZodString>, string | undefined, unknown>;
     manufacturer: z.ZodEffects<z.ZodOptional<z.ZodString>, string | undefined, unknown>;
@@ -18,6 +19,7 @@ export declare const unitInputSchema: z.ZodEffects<z.ZodObject<{
     asset_type_id?: string | undefined;
     unit_type?: string | undefined;
     asset_component_id?: string | null | undefined;
+    parent_unit_id?: string | null | undefined;
     model?: string | undefined;
     manufacturer?: string | undefined;
     location_note?: string | undefined;
@@ -29,6 +31,7 @@ export declare const unitInputSchema: z.ZodEffects<z.ZodObject<{
     asset_type_id?: string | undefined;
     unit_type?: string | undefined;
     asset_component_id?: string | null | undefined;
+    parent_unit_id?: string | null | undefined;
     model?: unknown;
     manufacturer?: unknown;
     location_note?: unknown;
@@ -40,6 +43,7 @@ export declare const unitInputSchema: z.ZodEffects<z.ZodObject<{
     asset_type_id?: string | undefined;
     unit_type?: string | undefined;
     asset_component_id?: string | null | undefined;
+    parent_unit_id?: string | null | undefined;
     model?: string | undefined;
     manufacturer?: string | undefined;
     location_note?: string | undefined;
@@ -51,6 +55,7 @@ export declare const unitInputSchema: z.ZodEffects<z.ZodObject<{
     asset_type_id?: string | undefined;
     unit_type?: string | undefined;
     asset_component_id?: string | null | undefined;
+    parent_unit_id?: string | null | undefined;
     model?: unknown;
     manufacturer?: unknown;
     location_note?: unknown;
@@ -60,6 +65,7 @@ export declare const unitUpdateSchema: z.ZodObject<{
     asset_type_id: z.ZodOptional<z.ZodOptional<z.ZodString>>;
     unit_type: z.ZodOptional<z.ZodOptional<z.ZodString>>;
     asset_component_id: z.ZodOptional<z.ZodOptional<z.ZodNullable<z.ZodString>>>;
+    parent_unit_id: z.ZodOptional<z.ZodOptional<z.ZodNullable<z.ZodString>>>;
     serial_number: z.ZodOptional<z.ZodString>;
     model: z.ZodOptional<z.ZodEffects<z.ZodOptional<z.ZodString>, string | undefined, unknown>>;
     manufacturer: z.ZodOptional<z.ZodEffects<z.ZodOptional<z.ZodString>, string | undefined, unknown>>;
@@ -73,6 +79,7 @@ export declare const unitUpdateSchema: z.ZodObject<{
     asset_type_id?: string | undefined;
     unit_type?: string | undefined;
     asset_component_id?: string | null | undefined;
+    parent_unit_id?: string | null | undefined;
     serial_number?: string | undefined;
     model?: string | undefined;
     manufacturer?: string | undefined;
@@ -84,6 +91,7 @@ export declare const unitUpdateSchema: z.ZodObject<{
     asset_type_id?: string | undefined;
     unit_type?: string | undefined;
     asset_component_id?: string | null | undefined;
+    parent_unit_id?: string | null | undefined;
     serial_number?: string | undefined;
     model?: unknown;
     manufacturer?: unknown;

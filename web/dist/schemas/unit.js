@@ -8,6 +8,7 @@ const unitFieldsSchema = zod_1.z.object({
     asset_type_id: zod_1.z.string().uuid().optional(),
     unit_type: zod_1.z.string().min(1).max(50).optional(),
     asset_component_id: zod_1.z.string().uuid().nullable().optional(),
+    parent_unit_id: zod_1.z.string().uuid().nullable().optional(),
     serial_number: zod_1.z.string().min(1).max(100),
     model: fields_1.optionalString,
     manufacturer: fields_1.optionalString,
@@ -16,9 +17,24 @@ const unitFieldsSchema = zod_1.z.object({
     installed_at: fields_1.optionalString,
     notes: fields_1.optionalString,
 });
-exports.unitInputSchema = unitFieldsSchema.refine((data) => Boolean(data.asset_type_id || data.unit_type), {
-    message: 'Norādiet aktīva tipu',
-    path: ['asset_type_id'],
+exports.unitInputSchema = unitFieldsSchema.superRefine((data, ctx) => {
+    if (data.parent_unit_id) {
+        if (!data.asset_component_id) {
+            ctx.addIssue({
+                code: zod_1.z.ZodIssueCode.custom,
+                message: 'Apakšaktīvam jānorāda apakšsadaļa',
+                path: ['asset_component_id'],
+            });
+        }
+        return;
+    }
+    if (!data.asset_type_id && !data.unit_type) {
+        ctx.addIssue({
+            code: zod_1.z.ZodIssueCode.custom,
+            message: 'Norādiet aktīva tipu',
+            path: ['asset_type_id'],
+        });
+    }
 });
 exports.unitUpdateSchema = unitFieldsSchema.partial();
 //# sourceMappingURL=unit.js.map

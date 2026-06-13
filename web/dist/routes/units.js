@@ -2,35 +2,24 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.unitsRouter = void 0;
 const express_1 = require("express");
-const zod_1 = require("zod");
-const uuid_1 = require("uuid");
 const auth_1 = require("../middleware/auth");
 const pool_1 = require("../db/pool");
 const pagination_1 = require("../utils/pagination");
 const errorHandler_1 = require("../middleware/errorHandler");
 const units_1 = require("../services/units");
-const assetTypes_1 = require("../services/assetTypes");
+const unitActivity_1 = require("../services/unitActivity");
+const unit_1 = require("../schemas/unit");
 exports.unitsRouter = (0, express_1.Router)();
 exports.unitsRouter.use(auth_1.authenticate);
-const unitBodySchema = zod_1.z.object({
-    client_id: zod_1.z.string().uuid(),
-    object_id: zod_1.z.string().uuid().optional(),
-    contract_id: zod_1.z.string().uuid().optional(),
-    asset_type_id: zod_1.z.string().uuid().optional(),
-    unit_type: zod_1.z.string().min(1).max(50).optional(),
-    asset_component_id: zod_1.z.string().uuid().nullable().optional(),
-    serial_number: zod_1.z.string().min(1).max(100),
-    model: zod_1.z.string().optional(),
-    manufacturer: zod_1.z.string().optional(),
-    status: zod_1.z.enum(['active', 'repair', 'decommissioned', 'spare']).default('active'),
-    location_note: zod_1.z.string().optional(),
-    installed_at: zod_1.z.string().optional(),
-    notes: zod_1.z.string().optional(),
-});
-const unitSchema = unitBodySchema.refine((data) => Boolean(data.asset_type_id || data.unit_type), {
-    message: 'Norādiet aktīva tipu',
-    path: ['asset_type_id'],
-});
+async function actorFromReq(req) {
+    const user = req.user;
+    if (!user)
+        return null;
+    return {
+        userId: user.userId,
+        userName: await (0, unitActivity_1.resolveStaffActorName)(user.userId),
+    };
+}
 exports.unitsRouter.get('/', async (req, res, next) => {
     try {
         const { page, limit, offset } = (0, pagination_1.parsePagination)(req.query);
@@ -56,24 +45,32 @@ exports.unitsRouter.get('/', async (req, res, next) => {
             const term = `%${search.trim()}%`;
             where += ` AND (
         u.serial_number LIKE ? OR u.model LIKE ? OR u.manufacturer LIKE ?
-        OR c.name LIKE ? OR co.name LIKE ?
+        OR c.name LIKE ? OR co.name LIKE ? OR ac.name LIKE ?
       )`;
-            params.push(term, term, term, term, term);
+            params.push(term, term, term, term, term, term);
         }
         const countRow = await (0, pool_1.queryOne)(`SELECT COUNT(*) as total FROM units u
        JOIN clients c ON c.id = u.client_id
        LEFT JOIN client_objects co ON co.id = u.object_id
+       LEFT JOIN asset_type_components ac ON ac.id = u.asset_component_id
        ${where}`, params);
         const units = await (0, pool_1.query)(`SELECT u.*, c.name AS client_name, co.name AS object_name,
               at.name AS asset_type_name, at.code AS asset_type_code,
-              ac.name AS asset_component_name
+              ac.name AS asset_component_name,
+              pu.serial_number AS parent_serial_number
        FROM units u
        JOIN clients c ON c.id = u.client_id
        LEFT JOIN client_objects co ON co.id = u.object_id
        LEFT JOIN asset_types at ON at.id = u.asset_type_id
        LEFT JOIN asset_type_components ac ON ac.id = u.asset_component_id
+       LEFT JOIN units pu ON pu.id = u.parent_unit_id
        ${where}
-       ORDER BY c.name ASC, co.name ASC, u.serial_number ASC
+       ORDER BY
+         c.name ASC,
+         co.name ASC,
+         CASE WHEN u.parent_unit_id IS NULL THEN 0 ELSE 1 END,
+         COALESCE(pu.serial_number, u.serial_number) ASC,
+         u.serial_number ASC
        LIMIT ? OFFSET ?`, [...params, limit, offset]);
         res.json({
             data: units,
@@ -84,9 +81,27 @@ exports.unitsRouter.get('/', async (req, res, next) => {
         next(err);
     }
 });
+exports.unitsRouter.get('/:id/activity', async (req, res, next) => {
+    try {
+        const unit = await (0, pool_1.queryOne)('SELECT id FROM units WHERE id = ?', [req.params.id]);
+        if (!unit)
+            throw new errorHandler_1.AppError(404, 'Unit not found');
+        const activity = await (0, unitActivity_1.listUnitActivity)(req.params.id);
+        res.json({ data: activity });
+    }
+    catch (err) {
+        next(err);
+    }
+});
 exports.unitsRouter.get('/:id', async (req, res, next) => {
     try {
-        const unit = await (0, pool_1.queryOne)('SELECT * FROM units WHERE id = ?', [req.params.id]);
+        const unit = await (0, pool_1.queryOne)(`SELECT u.*, at.name AS asset_type_name, ac.name AS asset_component_name,
+              pu.serial_number AS parent_serial_number
+       FROM units u
+       LEFT JOIN asset_types at ON at.id = u.asset_type_id
+       LEFT JOIN asset_type_components ac ON ac.id = u.asset_component_id
+       LEFT JOIN units pu ON pu.id = u.parent_unit_id
+       WHERE u.id = ?`, [req.params.id]);
         if (!unit)
             throw new errorHandler_1.AppError(404, 'Unit not found');
         res.json({ data: unit });
@@ -95,50 +110,17 @@ exports.unitsRouter.get('/:id', async (req, res, next) => {
         next(err);
     }
 });
-exports.unitsRouter.post('/', (0, auth_1.authorize)('admin', 'manager', 'technician'), async (req, res, next) => {
-    try {
-        const body = unitSchema.parse(req.body);
-        const assetType = await (0, assetTypes_1.resolveAssetTypeId)(body.asset_type_id, body.unit_type);
-        const assetComponentId = await (0, assetTypes_1.resolveAssetComponentId)(body.asset_component_id, assetType.id);
-        const id = (0, uuid_1.v4)();
-        await (0, pool_1.query)(`INSERT INTO units (id, client_id, object_id, contract_id, unit_type, asset_type_id, asset_component_id,
-        serial_number, model, manufacturer, status, location_note, installed_at, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
-            id, body.client_id, body.object_id ?? null, body.contract_id,
-            assetType.code, assetType.id, assetComponentId,
-            body.serial_number, body.model, body.manufacturer, body.status, body.location_note,
-            body.installed_at, body.notes,
-        ]);
-        const unit = await (0, pool_1.queryOne)('SELECT * FROM units WHERE id = ?', [id]);
-        res.status(201).json({ data: unit });
-    }
-    catch (err) {
-        next(err);
-    }
-});
 exports.unitsRouter.put('/:id', (0, auth_1.authorize)('admin', 'manager', 'technician'), async (req, res, next) => {
     try {
-        const body = unitBodySchema.partial().parse(req.body);
+        const body = unit_1.unitUpdateSchema.parse(req.body);
         const existing = await (0, pool_1.queryOne)('SELECT * FROM units WHERE id = ?', [req.params.id]);
         if (!existing)
             throw new errorHandler_1.AppError(404, 'Unit not found');
-        const payload = { ...body };
-        if (body.asset_type_id !== undefined ||
-            body.unit_type !== undefined ||
-            body.asset_component_id !== undefined) {
-            const assetType = await (0, assetTypes_1.resolveAssetTypeId)(body.asset_type_id ?? existing.asset_type_id ?? undefined, body.unit_type ?? existing.unit_type);
-            payload.unit_type = assetType.code;
-            payload.asset_type_id = assetType.id;
-            payload.asset_component_id = await (0, assetTypes_1.resolveAssetComponentId)(body.asset_component_id !== undefined
-                ? body.asset_component_id
-                : existing.asset_component_id, assetType.id);
+        if (!existing.object_id) {
+            throw new errorHandler_1.AppError(400, 'Aktīvam jābūt piesaistītam objektam', 'INVALID_UNIT');
         }
-        const fields = Object.keys(payload);
-        if (fields.length === 0)
-            throw new errorHandler_1.AppError(400, 'No fields to update');
-        const setClause = fields.map((f) => `${f} = ?`).join(', ');
-        await (0, pool_1.query)(`UPDATE units SET ${setClause} WHERE id = ?`, [...fields.map((f) => payload[f]), req.params.id]);
-        const unit = await (0, pool_1.queryOne)('SELECT * FROM units WHERE id = ?', [req.params.id]);
+        const actor = await actorFromReq(req);
+        const unit = await (0, units_1.updateUnitForObject)(existing.client_id, existing.object_id, req.params.id, body, actor);
         res.json({ data: unit });
     }
     catch (err) {
@@ -153,7 +135,8 @@ exports.unitsRouter.delete('/:id', (0, auth_1.authorize)('admin', 'manager', 'te
         if (!unit.object_id) {
             throw new errorHandler_1.AppError(400, 'Aktīvam jābūt piesaistītam objektam', 'INVALID_UNIT');
         }
-        await (0, units_1.deleteUnitForObject)(unit.client_id, unit.object_id, unit.id);
+        const actor = await actorFromReq(req);
+        await (0, units_1.deleteUnitForObject)(unit.client_id, unit.object_id, unit.id, actor);
         res.json({ success: true });
     }
     catch (err) {
