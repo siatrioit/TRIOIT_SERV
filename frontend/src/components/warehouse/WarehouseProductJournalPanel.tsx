@@ -24,7 +24,11 @@ function formatDateTime(value: string) {
   });
 }
 
-export function WarehouseProductJournalPage() {
+type Props = {
+  active?: boolean;
+};
+
+export function WarehouseProductJournalPanel({ active = true }: Props) {
   const [search, setSearch] = useState('');
   const [productFilter, setProductFilter] = useState('');
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
@@ -32,6 +36,7 @@ export function WarehouseProductJournalPage() {
   const { data: productsData, isLoading: productsLoading } = useQuery({
     queryKey: ['warehouse-products-journal', search],
     queryFn: () => warehouseCommercialApi.listProducts({ search: search || undefined }),
+    enabled: active,
   });
 
   const movementProductId = selectedProductId || productFilter || undefined;
@@ -43,6 +48,7 @@ export function WarehouseProductJournalPage() {
         product_id: movementProductId,
         limit: 500,
       }),
+    enabled: active,
   });
 
   const products = productsData?.data ?? [];
@@ -67,7 +73,7 @@ export function WarehouseProductJournalPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pt-2">
       <p className="text-sm text-gray-500">
         Preču atlikumi un kustību vēsture. Pakalpojumiem atlikums netiek uzskaitīts, bet kustības
         pavadzīmēs tiek fiksētas.
@@ -75,7 +81,7 @@ export function WarehouseProductJournalPage() {
 
       <section className="space-y-3">
         <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
-          <h3 className="font-medium text-gray-800">Preču atlikumi</h3>
+          <h4 className="font-medium text-gray-800">Preču atlikumi</h4>
           {lowStockCount > 0 && (
             <span className="text-xs bg-amber-50 text-amber-800 px-2 py-1 rounded-lg">
               {lowStockCount} preces ar zemu atlikumu
@@ -93,7 +99,7 @@ export function WarehouseProductJournalPage() {
         {productsLoading ? (
           <p className="text-sm text-gray-400">Ielādē...</p>
         ) : products.length === 0 ? (
-          <p className="text-sm text-gray-500 card py-6 text-center">Nav preču</p>
+          <p className="text-sm text-gray-500 py-6 text-center rounded-xl bg-gray-50">Nav preču</p>
         ) : (
           <div className="overflow-x-auto rounded-xl border border-gray-100">
             <table className="w-full text-sm">
@@ -167,7 +173,7 @@ export function WarehouseProductJournalPage() {
 
       <section className="space-y-3">
         <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
-          <h3 className="font-medium text-gray-800">Kustību žurnāls</h3>
+          <h4 className="font-medium text-gray-800">Kustību žurnāls</h4>
           <select
             className="input-field sm:w-64"
             value={productFilter}
@@ -188,7 +194,7 @@ export function WarehouseProductJournalPage() {
         {movementsLoading ? (
           <p className="text-sm text-gray-400">Ielādē...</p>
         ) : movements.length === 0 ? (
-          <p className="text-sm text-gray-500 card py-6 text-center">Nav kustību</p>
+          <p className="text-sm text-gray-500 py-6 text-center rounded-xl bg-gray-50">Nav kustību</p>
         ) : (
           <div className="overflow-x-auto rounded-xl border border-gray-100">
             <table className="w-full text-sm">
@@ -249,5 +255,50 @@ export function WarehouseProductJournalPage() {
         )}
       </section>
     </div>
+  );
+}
+
+export function WarehouseProductJournalCollapsible() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <section className="card !p-0 overflow-hidden">
+      <button
+        type="button"
+        className={`w-full flex items-center gap-3 px-4 py-4 text-left transition-colors ${
+          open ? 'bg-primary-50/60 border-b border-primary-100' : 'hover:bg-gray-50'
+        }`}
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <span
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-xl ${
+            open ? 'bg-primary-100' : 'bg-gray-100'
+          }`}
+          aria-hidden
+        >
+          📊
+        </span>
+        <span className="flex-1 min-w-0">
+          <span className="block font-medium text-gray-900">Preču žurnāls</span>
+          <span className="block text-xs text-gray-500 mt-0.5">
+            Atlikumi un kustību vēsture — atveriet, ja nepieciešams
+          </span>
+        </span>
+        <span
+          className={`shrink-0 text-gray-400 transition-transform duration-200 ${
+            open ? 'rotate-180' : ''
+          }`}
+          aria-hidden
+        >
+          ▾
+        </span>
+      </button>
+      {open && (
+        <div className="px-4 pb-5 pt-1 border-t border-gray-100 bg-gradient-to-b from-gray-50/80 to-white">
+          <WarehouseProductJournalPanel active={open} />
+        </div>
+      )}
+    </section>
   );
 }

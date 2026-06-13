@@ -80,8 +80,8 @@ export function WarehouseIssuesPage() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-500">
-        Izrakstīšanas žurnāls — preču izsniegšana no noliktavas pircējam. Grāmatojot pavadzīmi,
-        atlikums tiek samazināts (izņemot pakalpojumus).
+        Izrakstīšana — preču izsniegšana no noliktavas pircējam. Grāmatojot pavadzīmi, atlikums
+        tiek samazināts (izņemot pakalpojumus).
       </p>
 
       <div className="flex justify-end">
