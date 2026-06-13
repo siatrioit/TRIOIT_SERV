@@ -38,6 +38,7 @@ exports.setupIncidentStatusesRouter.post('/', async (req, res, next) => {
             sort_order: zod_1.z.number().int().optional(),
             badge_tone: zod_1.z.string().max(30).nullable().optional(),
             sync_unit_status: zod_1.z.enum(['active', 'repair', 'decommissioned', 'spare']).nullable().optional(),
+            sync_activity_label: zod_1.z.string().max(100).nullable().optional(),
         })
             .parse(req.body);
         const data = await (0, incidentStatuses_1.createIncidentStatus)(body);
@@ -56,6 +57,7 @@ exports.setupIncidentStatusesRouter.put('/:id', async (req, res, next) => {
             sort_order: zod_1.z.number().int().optional(),
             badge_tone: zod_1.z.string().max(30).nullable().optional(),
             sync_unit_status: zod_1.z.enum(['active', 'repair', 'decommissioned', 'spare']).nullable().optional(),
+            sync_activity_label: zod_1.z.string().max(100).nullable().optional(),
             is_active: zod_1.z.boolean().optional(),
         })
             .parse(req.body);

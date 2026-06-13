@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.syncUnitStatusFromIncident = syncUnitStatusFromIncident;
 const pool_1 = require("../db/pool");
+const unitActivity_1 = require("./unitActivity");
 const incidentStatuses_1 = require("./incidentStatuses");
 const units_1 = require("./units");
 /**
@@ -24,21 +25,58 @@ async function syncUnitStatusFromIncident(params, actor) {
          WHERE unit_id = ? AND id != ? AND status IN (${placeholders})
          ORDER BY received_at DESC LIMIT 1`, [unitId, incidentId, ...openCodes]);
             if (otherOpen) {
-                targetUnitStatus = byCode.get(otherOpen.status)?.sync_unit_status ?? null;
+                const otherConfig = byCode.get(otherOpen.status);
+                targetUnitStatus = otherConfig?.sync_unit_status ?? null;
+                if (targetUnitStatus) {
+                    await applyUnitSync({
+                        unitId,
+                        clientId,
+                        objectId,
+                        incidentId,
+                        incidentStatus: otherOpen.status,
+                        targetUnitStatus,
+                        activityLabel: otherConfig?.sync_activity_label ?? null,
+                        actor,
+                    });
+                    return;
+                }
             }
         }
-        if (!targetUnitStatus) {
-            targetUnitStatus = triggered.sync_unit_status ?? null;
-        }
+        targetUnitStatus = triggered.sync_unit_status ?? null;
     }
     else {
         targetUnitStatus = triggered.sync_unit_status ?? null;
     }
-    if (!targetUnitStatus)
+    const activityLabel = triggered.sync_activity_label ?? null;
+    if (!targetUnitStatus && !activityLabel?.trim())
         return;
+    await applyUnitSync({
+        unitId,
+        clientId,
+        objectId,
+        incidentId,
+        incidentStatus,
+        targetUnitStatus,
+        activityLabel,
+        actor,
+    });
+}
+async function applyUnitSync(params) {
+    const { unitId, clientId, objectId, incidentId, incidentStatus, targetUnitStatus, activityLabel, actor, } = params;
     const unit = await (0, units_1.getUnitForObject)(clientId, objectId, unitId);
-    if (!unit || unit.status === targetUnitStatus)
+    if (!unit)
         return;
-    await (0, units_1.updateUnitForObject)(clientId, objectId, unitId, { status: targetUnitStatus }, actor);
+    const note = activityLabel?.trim() || undefined;
+    let statusChanged = false;
+    if (targetUnitStatus && unit.status !== targetUnitStatus) {
+        await (0, units_1.updateUnitForObject)(clientId, objectId, unitId, { status: targetUnitStatus }, actor, { statusChangeNote: note });
+        statusChanged = true;
+    }
+    if (note && !statusChanged) {
+        await (0, unitActivity_1.logUnitActivity)(unitId, 'incident_sync', note, actor, {
+            incident_id: incidentId,
+            incident_status: incidentStatus,
+        });
+    }
 }
 //# sourceMappingURL=unitStatusSync.js.map

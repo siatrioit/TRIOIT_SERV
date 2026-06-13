@@ -83,8 +83,8 @@ async function createIncidentStatus(input) {
         (await (0, pool_1.queryOne)('SELECT COALESCE(MAX(sort_order), 0) + 10 AS next FROM incident_statuses'))
             ?.next ??
         10;
-    await (0, pool_1.query)(`INSERT INTO incident_statuses (id, code, label, category, sort_order, badge_tone, sync_unit_status)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`, [
+    await (0, pool_1.query)(`INSERT INTO incident_statuses (id, code, label, category, sort_order, badge_tone, sync_unit_status, sync_activity_label)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [
         id,
         code,
         input.label.trim(),
@@ -92,6 +92,7 @@ async function createIncidentStatus(input) {
         sortOrder,
         input.badge_tone ?? 'gray',
         input.sync_unit_status ?? null,
+        input.sync_activity_label?.trim() || null,
     ]);
     invalidateIncidentStatusCache();
     return (await (0, pool_1.queryOne)('SELECT * FROM incident_statuses WHERE id = ?', [id]));
@@ -114,6 +115,9 @@ async function updateIncidentStatus(id, input) {
         updates.badge_tone = input.badge_tone;
     if (input.sync_unit_status !== undefined)
         updates.sync_unit_status = input.sync_unit_status;
+    if (input.sync_activity_label !== undefined) {
+        updates.sync_activity_label = input.sync_activity_label?.trim() || null;
+    }
     if (input.is_active !== undefined)
         updates.is_active = input.is_active ? 1 : 0;
     const fields = Object.keys(updates);

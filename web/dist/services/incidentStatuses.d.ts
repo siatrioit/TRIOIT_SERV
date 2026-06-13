@@ -8,6 +8,7 @@ export interface IncidentStatusRow {
     sort_order: number;
     badge_tone: string | null;
     sync_unit_status: UnitStatusCode | null;
+    sync_activity_label?: string | null;
     is_active: number | boolean;
     created_at: string;
     updated_at: string;
@@ -26,6 +27,7 @@ export declare function createIncidentStatus(input: {
     sort_order?: number;
     badge_tone?: string | null;
     sync_unit_status?: UnitStatusCode | null;
+    sync_activity_label?: string | null;
 }): Promise<IncidentStatusRow>;
 export declare function updateIncidentStatus(id: string, input: {
     label?: string;
@@ -33,6 +35,7 @@ export declare function updateIncidentStatus(id: string, input: {
     sort_order?: number;
     badge_tone?: string | null;
     sync_unit_status?: UnitStatusCode | null;
+    sync_activity_label?: string | null;
     is_active?: boolean;
 }): Promise<IncidentStatusRow | null>;
 export declare function deleteIncidentStatus(id: string): Promise<void>;

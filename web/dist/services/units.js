@@ -34,6 +34,11 @@ const UNIT_JOINS = `
   LEFT JOIN units pu ON pu.id = u.parent_unit_id
   LEFT JOIN asset_type_components pac ON pac.id = pu.asset_component_id
 `;
+const OPEN_INCIDENT_COUNT_SQL = `
+  (SELECT COUNT(*) FROM incidents i
+   INNER JOIN incident_statuses st ON st.code = i.status AND st.category = 'open' AND st.is_active = 1
+   WHERE i.unit_id = u.id) AS open_incident_count
+`;
 async function getMainUnitForObject(clientId, objectId, parentUnitId) {
     const parent = await (0, pool_1.queryOne)(`SELECT ${UNIT_SELECT}
      FROM units u
@@ -87,7 +92,7 @@ async function assertObjectForClient(clientId, objectId) {
 }
 async function listUnitsForObject(clientId, objectId) {
     await assertObjectForClient(clientId, objectId);
-    return (0, pool_1.query)(`SELECT ${UNIT_SELECT}
+    return (0, pool_1.query)(`SELECT ${UNIT_SELECT}, ${OPEN_INCIDENT_COUNT_SQL}
      FROM units u
      ${UNIT_JOINS}
      WHERE u.client_id = ? AND u.object_id = ?
@@ -139,7 +144,7 @@ async function createUnitForObject(clientId, objectId, input, actor) {
     await (0, unitActivity_1.logUnitActivity)(id, 'created', resolved.parentUnitId ? 'Izveidots apakšaktīvs' : 'Izveidots galvenais aktīvs', actor, { serial_number: input.serial_number.trim() });
     return unit;
 }
-async function updateUnitForObject(clientId, objectId, unitId, input, actor) {
+async function updateUnitForObject(clientId, objectId, unitId, input, actor, options) {
     const existing = await getUnitForObject(clientId, objectId, unitId);
     if (!existing)
         return null;
@@ -194,7 +199,9 @@ async function updateUnitForObject(clientId, objectId, unitId, input, actor) {
         }
     }
     if (input.status !== undefined && input.status !== existing.status) {
-        await (0, unitActivity_1.logUnitActivity)(unitId, 'status_changed', `Statuss: ${UNIT_STATUS_LABELS[existing.status] || existing.status} → ${UNIT_STATUS_LABELS[input.status] || input.status}`, actor);
+        const note = options?.statusChangeNote?.trim();
+        await (0, unitActivity_1.logUnitActivity)(unitId, note ? 'incident_sync' : 'status_changed', note ||
+            `Statuss: ${UNIT_STATUS_LABELS[existing.status] || existing.status} → ${UNIT_STATUS_LABELS[input.status] || input.status}`, actor, note ? { source: 'incident' } : undefined);
     }
     const otherFields = fields.filter((f) => !['parent_unit_id', 'status', 'asset_type_id', 'unit_type', 'asset_component_id'].includes(f) &&
         (updates[f] ?? null) !== (existing[f] ?? null));
