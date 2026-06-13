@@ -42,6 +42,30 @@ function clearUnreadInListCache(
   );
 }
 
+async function markThreadRead(
+  incidentId: string,
+  variant: 'staff' | 'portal',
+  queryClient: ReturnType<typeof useQueryClient>,
+  queryKey: readonly unknown[]
+) {
+  if (variant === 'portal') {
+    await portalIncidentsApi.markRead(incidentId);
+  } else {
+    await incidentMessagesApi.markRead(incidentId);
+  }
+  clearUnreadInListCache(queryClient, incidentId, variant);
+  await queryClient.invalidateQueries({
+    queryKey: variant === 'portal' ? ['portal-incidents'] : ['incidents'],
+  });
+  queryClient.setQueryData<{ data: IncidentMessage[] }>(queryKey, (old) => {
+    if (!old?.data) return old;
+    return {
+      ...old,
+      data: old.data.map((msg) => ({ ...msg, is_unread: false })),
+    };
+  });
+}
+
 export function IncidentMessageThread({
   incidentId,
   variant,
@@ -51,6 +75,8 @@ export function IncidentMessageThread({
   const queryClient = useQueryClient();
   const bottomRef = useRef<HTMLDivElement>(null);
   const markedReadRef = useRef(false);
+  const hadUnreadOnOpen = useRef(false);
+  const capturedInitial = useRef(false);
   const [text, setText] = useState('');
   const [error, setError] = useState('');
 
@@ -59,7 +85,7 @@ export function IncidentMessageThread({
       ? ['portal-incident-messages', incidentId]
       : ['incident-messages', incidentId];
 
-  const { data, isLoading, isSuccess } = useQuery({
+  const { data, isLoading, isFetched } = useQuery({
     queryKey,
     queryFn: () =>
       variant === 'portal'
@@ -73,44 +99,36 @@ export function IncidentMessageThread({
 
   useEffect(() => {
     markedReadRef.current = false;
+    hadUnreadOnOpen.current = false;
+    capturedInitial.current = false;
   }, [incidentId, variant]);
 
   useEffect(() => {
-    if (!isSuccess || markedReadRef.current) return;
+    if (!isFetched || !data || markedReadRef.current || capturedInitial.current) return;
 
-    const hasUnread = messages.some((msg) => msg.is_unread);
-    const delayMs = hasUnread ? 2000 : 0;
+    capturedInitial.current = true;
+    hadUnreadOnOpen.current = (data.data ?? []).some((msg) => msg.is_unread);
+
+    const delayMs = hadUnreadOnOpen.current ? 2000 : 0;
+    let cancelled = false;
 
     const timer = window.setTimeout(() => {
-      const markRead = async () => {
-        try {
-          if (variant === 'portal') {
-            await portalIncidentsApi.markRead(incidentId);
-          } else {
-            await incidentMessagesApi.markRead(incidentId);
-          }
-          markedReadRef.current = true;
-          clearUnreadInListCache(queryClient, incidentId, variant);
-          await queryClient.invalidateQueries({
-            queryKey: variant === 'portal' ? ['portal-incidents'] : ['incidents'],
-          });
-          queryClient.setQueryData<{ data: IncidentMessage[] }>(queryKey, (old) => {
-            if (!old?.data) return old;
-            return {
-              ...old,
-              data: old.data.map((msg) => ({ ...msg, is_unread: false })),
-            };
-          });
-        } catch {
-          /* ignore */
-        }
-      };
+      if (cancelled || markedReadRef.current) return;
 
-      markRead();
+      markThreadRead(incidentId, variant, queryClient, queryKey)
+        .then(() => {
+          markedReadRef.current = true;
+        })
+        .catch(() => {
+          /* ignore */
+        });
     }, delayMs);
 
-    return () => window.clearTimeout(timer);
-  }, [isSuccess, incidentId, variant, queryClient, queryKey, messages]);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [isFetched, data, incidentId, variant, queryClient, queryKey]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -121,10 +139,16 @@ export function IncidentMessageThread({
       variant === 'portal'
         ? portalIncidentsApi.sendMessage(incidentId, body)
         : incidentMessagesApi.send(incidentId, body),
-    onSuccess: () => {
+    onSuccess: async () => {
       setText('');
       setError('');
-      queryClient.invalidateQueries({ queryKey });
+      await queryClient.invalidateQueries({ queryKey });
+      try {
+        await markThreadRead(incidentId, variant, queryClient, queryKey);
+        markedReadRef.current = true;
+      } catch {
+        /* ignore */
+      }
     },
     onError: (err) => {
       setError(

@@ -8,6 +8,7 @@ import {
   type UnitInput,
   unitDisplayLabel,
 } from '../../api/units';
+import { groupUnitsIntoTree } from '../../utils/unitTree';
 import { UnitModal } from '../units/UnitModal';
 
 type ObjectUnitsSectionProps = {
@@ -16,11 +17,24 @@ type ObjectUnitsSectionProps = {
   readOnly?: boolean;
 };
 
+type ModalState =
+  | { open: false }
+  | { open: true; mode: 'create'; defaultParentId?: string | null; forceSubAsset?: boolean }
+  | { open: true; mode: 'edit'; unit: Unit };
+
+function UnitMeta({ unit }: { unit: Unit }) {
+  return (
+    <p className="text-xs text-gray-500 mt-0.5">
+      {UNIT_STATUS_LABELS[unit.status]}
+      {unit.manufacturer ? ` · ${unit.manufacturer}` : ''}
+      {unit.location_note ? ` · ${unit.location_note}` : ''}
+    </p>
+  );
+}
+
 export function ObjectUnitsSection({ clientId, objectId, readOnly }: ObjectUnitsSectionProps) {
   const queryClient = useQueryClient();
-  const [modal, setModal] = useState<
-    { open: false } | { open: true; mode: 'create' } | { open: true; mode: 'edit'; unit: Unit }
-  >({ open: false });
+  const [modal, setModal] = useState<ModalState>({ open: false });
 
   const queryKey = ['object-units', clientId, objectId];
   const { data, isLoading } = useQuery({
@@ -30,6 +44,7 @@ export function ObjectUnitsSection({ clientId, objectId, readOnly }: ObjectUnits
   });
 
   const units = data?.data ?? [];
+  const tree = groupUnitsIntoTree(units);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey });
 
@@ -67,42 +82,87 @@ export function ObjectUnitsSection({ clientId, objectId, readOnly }: ObjectUnits
             className="btn-secondary !py-2 !px-4 !min-h-0 text-sm w-full sm:w-auto shrink-0"
             onClick={() => setModal({ open: true, mode: 'create' })}
           >
-            + Pievienot
+            + Galvenais aktīvs
           </button>
         )}
       </div>
 
       {isLoading ? (
         <p className="text-sm text-gray-400 py-4">Ielādē...</p>
-      ) : units.length === 0 ? (
+      ) : tree.length === 0 ? (
         <p className="text-sm text-gray-500 py-4 text-center border border-dashed border-gray-200 rounded-xl">
           Nav reģistrētu aktīvu
         </p>
       ) : (
         <ul className="divide-y divide-gray-100 -mx-1">
-          {units.map((unit) => (
-            <li key={unit.id} className="px-3 py-3 flex items-start justify-between gap-3">
-              <button
-                type="button"
-                className="text-left flex-1 min-w-0"
-                onClick={() => !readOnly && setModal({ open: true, mode: 'edit', unit })}
-                disabled={readOnly}
-              >
-                <p className="font-medium text-gray-900 truncate">{unitDisplayLabel(unit)}</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {UNIT_STATUS_LABELS[unit.status]}
-                  {unit.manufacturer ? ` · ${unit.manufacturer}` : ''}
-                  {unit.location_note ? ` · ${unit.location_note}` : ''}
-                </p>
-              </button>
-              {!readOnly && (
+          {tree.map(({ unit, children }) => (
+            <li key={unit.id}>
+              <div className="px-3 py-3 flex items-start justify-between gap-3">
                 <button
                   type="button"
-                  className="text-sm text-red-600 shrink-0 px-2 py-1"
-                  onClick={() => handleDelete(unit)}
+                  className="text-left flex-1 min-w-0"
+                  onClick={() => !readOnly && setModal({ open: true, mode: 'edit', unit })}
+                  disabled={readOnly}
                 >
-                  Dzēst
+                  <p className="font-medium text-gray-900 truncate">{unitDisplayLabel(unit)}</p>
+                  <UnitMeta unit={unit} />
                 </button>
+                {!readOnly && (
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <button
+                      type="button"
+                      className="text-sm text-primary-600 px-2 py-1"
+                      onClick={() =>
+                        setModal({
+                          open: true,
+                          mode: 'create',
+                          defaultParentId: unit.id,
+                          forceSubAsset: true,
+                        })
+                      }
+                    >
+                      + Apakšaktīvs
+                    </button>
+                    <button
+                      type="button"
+                      className="text-sm text-red-600 px-2 py-1"
+                      onClick={() => handleDelete(unit)}
+                    >
+                      Dzēst
+                    </button>
+                  </div>
+                )}
+              </div>
+              {children.length > 0 && (
+                <ul className="border-t border-gray-50 bg-white/60">
+                  {children.map((child) => (
+                    <li
+                      key={child.id}
+                      className="pl-8 pr-3 py-2.5 flex items-start justify-between gap-3 border-t border-gray-50 first:border-t-0"
+                    >
+                      <button
+                        type="button"
+                        className="text-left flex-1 min-w-0"
+                        onClick={() => !readOnly && setModal({ open: true, mode: 'edit', unit: child })}
+                        disabled={readOnly}
+                      >
+                        <p className="text-sm font-medium text-gray-800 truncate">
+                          ↳ {unitDisplayLabel(child)}
+                        </p>
+                        <UnitMeta unit={child} />
+                      </button>
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          className="text-sm text-red-600 shrink-0 px-2 py-1"
+                          onClick={() => handleDelete(child)}
+                        >
+                          Dzēst
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               )}
             </li>
           ))}
@@ -117,6 +177,15 @@ export function ObjectUnitsSection({ clientId, objectId, readOnly }: ObjectUnits
           onClose={() => setModal({ open: false })}
           onSave={handleSave}
           canStartIncident={!readOnly}
+          clientId={clientId}
+          objectId={objectId}
+          siblingUnits={units}
+          defaultParentId={
+            modal.open && modal.mode === 'create' ? modal.defaultParentId : undefined
+          }
+          forceSubAsset={
+            modal.open && modal.mode === 'create' ? modal.forceSubAsset : undefined
+          }
         />
       )}
     </section>

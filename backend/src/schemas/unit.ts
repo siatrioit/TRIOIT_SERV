@@ -7,6 +7,7 @@ const unitFieldsSchema = z.object({
   asset_type_id: z.string().uuid().optional(),
   unit_type: z.string().min(1).max(50).optional(),
   asset_component_id: z.string().uuid().nullable().optional(),
+  parent_unit_id: z.string().uuid().nullable().optional(),
   serial_number: z.string().min(1).max(100),
   model: optionalString,
   manufacturer: optionalString,
@@ -16,12 +17,24 @@ const unitFieldsSchema = z.object({
   notes: optionalString,
 });
 
-export const unitInputSchema = unitFieldsSchema.refine(
-  (data) => Boolean(data.asset_type_id || data.unit_type),
-  {
-    message: 'Norādiet aktīva tipu',
-    path: ['asset_type_id'],
+export const unitInputSchema = unitFieldsSchema.superRefine((data, ctx) => {
+  if (data.parent_unit_id) {
+    if (!data.asset_component_id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Apakšaktīvam jānorāda apakšsadaļa',
+        path: ['asset_component_id'],
+      });
+    }
+    return;
   }
-);
+  if (!data.asset_type_id && !data.unit_type) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Norādiet aktīva tipu',
+      path: ['asset_type_id'],
+    });
+  }
+});
 
 export const unitUpdateSchema = unitFieldsSchema.partial();

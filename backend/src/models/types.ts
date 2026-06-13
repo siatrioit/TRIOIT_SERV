@@ -110,8 +110,10 @@ export interface Unit {
   unit_type: UnitType | string;
   asset_type_id?: string | null;
   asset_component_id?: string | null;
+  parent_unit_id?: string | null;
   asset_type_name?: string | null;
   asset_component_name?: string | null;
+  parent_serial_number?: string | null;
   serial_number: string;
   model?: string;
   manufacturer?: string;

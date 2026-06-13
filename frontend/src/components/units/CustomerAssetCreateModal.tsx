@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { clientsApi } from '../../api/clients';
-import type { UnitInput } from '../../api/units';
+import { unitsApi, type UnitInput } from '../../api/units';
 import { UnitModal } from './UnitModal';
 import { Modal } from '../ui/Modal';
 
@@ -41,6 +41,14 @@ export function CustomerAssetCreateModal({ open, onClose, onSave }: CustomerAsse
     () => (clientDetail?.data.objects || []).filter((o) => o.status !== 'closed'),
     [clientDetail]
   );
+
+  const { data: objectUnitsData } = useQuery({
+    queryKey: ['object-units', clientId, objectId],
+    queryFn: () => unitsApi.listForObject(clientId, objectId),
+    enabled: open && step === 'asset' && Boolean(clientId && objectId),
+  });
+
+  const siblingUnits = objectUnitsData?.data ?? [];
 
   useEffect(() => {
     if (!open) return;
@@ -82,6 +90,9 @@ export function CustomerAssetCreateModal({ open, onClose, onSave }: CustomerAsse
         mode="create"
         onClose={() => setStep('location')}
         onSave={handleAssetSave}
+        clientId={clientId}
+        objectId={objectId}
+        siblingUnits={siblingUnits}
       />
     );
   }

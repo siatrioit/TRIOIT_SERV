@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client';
@@ -12,6 +12,17 @@ import {
 import { CustomerAssetCreateModal } from '../components/units/CustomerAssetCreateModal';
 import { UnitModal } from '../components/units/UnitModal';
 import { useAuthStore } from '../store/authStore';
+import { groupUnitsIntoTree } from '../utils/unitTree';
+
+function UnitMeta({ unit }: { unit: Unit }) {
+  return (
+    <p className="text-xs text-gray-400 mt-1">
+      {UNIT_STATUS_LABELS[unit.status]}
+      {unit.manufacturer ? ` · ${unit.manufacturer}` : ''}
+      {unit.location_note ? ` · ${unit.location_note}` : ''}
+    </p>
+  );
+}
 
 export function CustomerAssetsPage() {
   const role = useAuthStore((s) => s.user?.role);
@@ -35,6 +46,37 @@ export function CustomerAssetsPage() {
 
   const assets = data?.data ?? [];
 
+  const groupedByObject = useMemo(() => {
+    const map = new Map<string, Unit[]>();
+    for (const unit of assets) {
+      const key = `${unit.client_id}:${unit.object_id ?? 'none'}`;
+      const list = map.get(key) ?? [];
+      list.push(unit);
+      map.set(key, list);
+    }
+    return map;
+  }, [assets]);
+
+  const siblingUnits = useMemo(() => {
+    if (!editUnit?.object_id) return assets;
+    const key = `${editUnit.client_id}:${editUnit.object_id}`;
+    return groupedByObject.get(key) ?? assets.filter((u) => u.object_id === editUnit.object_id);
+  }, [editUnit, groupedByObject, assets]);
+
+  const displayGroups = useMemo(() => {
+    const groups: { key: string; clientId: string; objectId: string | null; tree: ReturnType<typeof groupUnitsIntoTree> }[] = [];
+    for (const [key, units] of groupedByObject) {
+      const [clientId, objectIdRaw] = key.split(':');
+      groups.push({
+        key,
+        clientId,
+        objectId: objectIdRaw === 'none' ? null : objectIdRaw,
+        tree: groupUnitsIntoTree(units),
+      });
+    }
+    return groups;
+  }, [groupedByObject]);
+
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['customer-assets'] });
 
   const handleCreate = async (clientId: string, objectId: string, payload: UnitInput) => {
@@ -44,7 +86,11 @@ export function CustomerAssetsPage() {
 
   const handleUpdate = async (payload: UnitInput) => {
     if (!editUnit) return;
-    await unitsApi.update(editUnit.id, payload);
+    if (editUnit.object_id) {
+      await unitsApi.updateForObject(editUnit.client_id, editUnit.object_id, editUnit.id, payload);
+    } else {
+      await unitsApi.update(editUnit.id, payload);
+    }
     await invalidate();
     setEditUnit(null);
   };
@@ -62,6 +108,46 @@ export function CustomerAssetsPage() {
       alert(err instanceof ApiError ? err.displayMessage : 'Neizdevās dzēst');
     }
   };
+
+  const renderUnitRow = (unit: Unit, isChild: boolean) => (
+    <div
+      key={unit.id}
+      className={`flex justify-between gap-3 items-start ${isChild ? 'pl-6 border-l-2 border-gray-100 ml-2' : ''}`}
+    >
+      <button
+        type="button"
+        className="text-left flex-1 min-w-0"
+        onClick={() => canEdit && setEditUnit(unit)}
+        disabled={!canEdit}
+      >
+        <p className={`font-medium text-gray-900 ${isChild ? 'text-sm' : ''}`}>
+          {isChild ? `↳ ${unitDisplayLabel(unit)}` : unitDisplayLabel(unit)}
+        </p>
+        {!isChild && (
+          <p className="text-sm text-gray-600 mt-0.5">
+            <Link
+              to={`/clients/${unit.client_id}`}
+              className="text-primary-600 hover:underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {unit.client_name || 'Klients'}
+            </Link>
+            {unit.object_name ? ` · ${unit.object_name}` : ''}
+          </p>
+        )}
+        <UnitMeta unit={unit} />
+      </button>
+      {canEdit && (
+        <button
+          type="button"
+          className="text-sm text-red-600 shrink-0 px-2 py-1"
+          onClick={() => handleDelete(unit)}
+        >
+          Dzēst
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <div className="space-y-4 pb-8">
@@ -109,42 +195,18 @@ export function CustomerAssetsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {assets.map((unit) => (
-            <div key={unit.id} className="card">
-              <div className="flex justify-between gap-3 items-start">
-                <button
-                  type="button"
-                  className="text-left flex-1 min-w-0"
-                  onClick={() => canEdit && setEditUnit(unit)}
-                  disabled={!canEdit}
-                >
-                  <p className="font-medium text-gray-900">{unitDisplayLabel(unit)}</p>
-                  <p className="text-sm text-gray-600 mt-0.5">
-                    <Link
-                      to={`/clients/${unit.client_id}`}
-                      className="text-primary-600 hover:underline"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {unit.client_name || 'Klients'}
-                    </Link>
-                    {unit.object_name ? ` · ${unit.object_name}` : ''}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    {UNIT_STATUS_LABELS[unit.status]}
-                    {unit.manufacturer ? ` · ${unit.manufacturer}` : ''}
-                    {unit.location_note ? ` · ${unit.location_note}` : ''}
-                  </p>
-                </button>
-                {canEdit && (
-                  <button
-                    type="button"
-                    className="text-sm text-red-600 shrink-0 px-2 py-1"
-                    onClick={() => handleDelete(unit)}
-                  >
-                    Dzēst
-                  </button>
-                )}
-              </div>
+          {displayGroups.map(({ key, tree }) => (
+            <div key={key} className="card space-y-3">
+              {tree.map(({ unit, children }) => (
+                <div key={unit.id} className="space-y-2">
+                  {renderUnitRow(unit, false)}
+                  {children.length > 0 && (
+                    <div className="space-y-2 pt-1">
+                      {children.map((child) => renderUnitRow(child, true))}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           ))}
         </div>
@@ -164,6 +226,9 @@ export function CustomerAssetsPage() {
             onClose={() => setEditUnit(null)}
             onSave={handleUpdate}
             canStartIncident={canStartIncident}
+            clientId={editUnit?.client_id}
+            objectId={editUnit?.object_id ?? undefined}
+            siblingUnits={siblingUnits}
           />
         </>
       )}

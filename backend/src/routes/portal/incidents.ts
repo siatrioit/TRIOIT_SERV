@@ -14,6 +14,7 @@ import {
   addPortalMessage,
   listIncidentMessagesWithReadState,
   markIncidentRead,
+  PORTAL_UNREAD_COUNT_SQL,
 } from '../../services/incidentMessages';
 import { assertUnitForIncident } from '../../services/units';
 import { resolveIncidentAssignee } from '../../services/incidentAssignment';
@@ -107,13 +108,7 @@ portalIncidentsRouter.get('/', async (req, res, next) => {
               c.name AS client_name, co.name AS object_name,
               u.id AS unit_id, u.serial_number AS unit_serial, u.unit_type, u.model AS unit_model,
               ac.name AS asset_component_name,
-              (SELECT COUNT(*) FROM incident_messages m
-               WHERE m.incident_id = i.id AND m.author_type = 'staff'
-               AND m.created_at > COALESCE(
-                 (SELECT r.last_read_at FROM incident_message_reads r
-                  WHERE r.incident_id = i.id AND r.reader_type = 'portal' AND r.reader_id = ?),
-                 '1970-01-01 00:00:00'
-               )) AS unread_count
+              ${PORTAL_UNREAD_COUNT_SQL} AS unread_count
        FROM incidents i
        JOIN clients c ON c.id = i.client_id
        LEFT JOIN client_objects co ON co.id = i.object_id
@@ -122,7 +117,7 @@ portalIncidentsRouter.get('/', async (req, res, next) => {
        ${where}
        ORDER BY i.received_at DESC
        LIMIT ? OFFSET ?`,
-      [...queryParams, portalUserId, limit, offset]
+      [...queryParams, portalUserId, portalUserId, portalUserId, limit, offset]
     );
 
     res.json({
