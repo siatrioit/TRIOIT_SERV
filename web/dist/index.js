@@ -32,6 +32,7 @@ const portalUsers_1 = require("./routes/portalUsers");
 const push_1 = require("./routes/push");
 const assetTypes_1 = require("./routes/assetTypes");
 const incidentStatuses_1 = require("./routes/incidentStatuses");
+const companySettings_1 = require("./routes/companySettings");
 const migrate_1 = require("./db/migrate");
 const version_1 = require("./version");
 dotenv_1.default.config();
@@ -102,6 +103,7 @@ app.use(`${API_PREFIX}/asset-types`, assetTypes_1.assetTypesRouter);
 app.use(`${API_PREFIX}/setup/asset-types`, assetTypes_1.setupAssetTypesRouter);
 app.use(`${API_PREFIX}/incident-statuses`, incidentStatuses_1.incidentStatusesRouter);
 app.use(`${API_PREFIX}/setup/incident-statuses`, incidentStatuses_1.setupIncidentStatusesRouter);
+app.use(`${API_PREFIX}/company-settings`, companySettings_1.companySettingsRouter);
 // cPanel: statiskais frontend no public/ mapes (viena Node.js aplikācija uz serv.trioit.lv)
 const staticDir = process.env.STATIC_DIR;
 if (staticDir) {

@@ -47,10 +47,35 @@ exports.authRouter.post('/login', async (req, res, next) => {
 });
 exports.authRouter.get('/me', auth_1.authenticate, async (req, res, next) => {
     try {
-        const user = await (0, pool_1.queryOne)('SELECT id, email, full_name, role, phone FROM users WHERE id = ?', [req.user.userId]);
+        const user = await (0, pool_1.queryOne)('SELECT id, email, full_name, role, phone, signature_data FROM users WHERE id = ?', [req.user.userId]);
         if (!user)
             throw new errorHandler_1.AppError(404, 'User not found');
-        res.json({ data: user });
+        const { signature_data, ...rest } = user;
+        res.json({
+            data: {
+                ...rest,
+                has_signature: Boolean(signature_data?.startsWith('data:image/')),
+                signature_data: signature_data ?? null,
+            },
+        });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+exports.authRouter.put('/me/signature', auth_1.authenticate, async (req, res, next) => {
+    try {
+        const body = zod_1.z
+            .object({
+            signature_data: zod_1.z.string().nullable(),
+        })
+            .parse(req.body);
+        if (body.signature_data &&
+            !body.signature_data.startsWith('data:image/')) {
+            throw new errorHandler_1.AppError(400, 'Nederīgs paraksta attēls', 'INVALID_SIGNATURE');
+        }
+        await (0, pool_1.query)('UPDATE users SET signature_data = ? WHERE id = ?', [body.signature_data, req.user.userId]);
+        res.json({ success: true });
     }
     catch (err) {
         next(err);

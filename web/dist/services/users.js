@@ -12,12 +12,35 @@ const uuid_1 = require("uuid");
 const pool_1 = require("../db/pool");
 const errorHandler_1 = require("../middleware/errorHandler");
 async function listStaffUsers() {
-    return (0, pool_1.query)(`SELECT id, email, full_name, phone, role, is_active, last_login_at, created_at, updated_at
+    const rows = await (0, pool_1.query)(`SELECT id, email, full_name, phone, role, is_active, signature_data,
+            last_login_at, created_at, updated_at
      FROM users ORDER BY full_name ASC`);
+    return rows.map((row) => {
+        const { signature_data, ...rest } = row;
+        return {
+            ...rest,
+            has_signature: Boolean(signature_data?.startsWith('data:image/')),
+        };
+    });
 }
-async function getStaffUser(id) {
-    return (0, pool_1.queryOne)(`SELECT id, email, full_name, phone, role, is_active, last_login_at, created_at, updated_at
+async function getStaffUser(id, includeSignature = false) {
+    const row = await (0, pool_1.queryOne)(`SELECT id, email, full_name, phone, role, is_active,
+            ${includeSignature ? 'signature_data,' : ''}
+            last_login_at, created_at, updated_at
      FROM users WHERE id = ?`, [id]);
+    if (!row)
+        return null;
+    if (!includeSignature) {
+        const { signature_data, ...rest } = row;
+        return {
+            ...rest,
+            has_signature: Boolean(signature_data?.startsWith('data:image/')),
+        };
+    }
+    return {
+        ...row,
+        has_signature: Boolean(row.signature_data?.startsWith('data:image/')),
+    };
 }
 async function createStaffUser(input) {
     const existing = await (0, pool_1.queryOne)('SELECT id FROM users WHERE email = ?', [input.email]);
@@ -75,6 +98,11 @@ async function updateStaffUser(id, input, actorId) {
             const hash = await bcryptjs_1.default.hash(input.password, 10);
             setParts.push('password_hash = ?');
             values.push(hash);
+            continue;
+        }
+        if (field === 'signature_data') {
+            setParts.push('signature_data = ?');
+            values.push(input.signature_data ?? null);
             continue;
         }
         setParts.push(`${field} = ?`);

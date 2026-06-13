@@ -26,19 +26,22 @@ export declare const updateUserSchema: z.ZodObject<{
     role: z.ZodOptional<z.ZodEnum<["admin", "manager", "technician", "viewer"]>>;
     is_active: z.ZodOptional<z.ZodBoolean>;
     password: z.ZodOptional<z.ZodString>;
+    signature_data: z.ZodOptional<z.ZodNullable<z.ZodString>>;
 }, "strip", z.ZodTypeAny, {
     password?: string | undefined;
     role?: "admin" | "manager" | "technician" | "viewer" | undefined;
     email?: string | undefined;
+    signature_data?: string | null | undefined;
+    full_name?: string | undefined;
     phone?: string | undefined;
     is_active?: boolean | undefined;
-    full_name?: string | undefined;
 }, {
     password?: string | undefined;
     role?: "admin" | "manager" | "technician" | "viewer" | undefined;
     email?: string | undefined;
+    signature_data?: string | null | undefined;
+    full_name?: string | undefined;
     phone?: unknown;
     is_active?: boolean | undefined;
-    full_name?: string | undefined;
 }>;
 //# sourceMappingURL=user.d.ts.map

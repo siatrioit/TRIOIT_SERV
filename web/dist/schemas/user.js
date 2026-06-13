@@ -18,5 +18,6 @@ exports.updateUserSchema = zod_1.z.object({
     role: exports.userRoleSchema.optional(),
     is_active: zod_1.z.boolean().optional(),
     password: zod_1.z.string().min(8).optional(),
+    signature_data: zod_1.z.string().nullable().optional(),
 });
 //# sourceMappingURL=user.js.map

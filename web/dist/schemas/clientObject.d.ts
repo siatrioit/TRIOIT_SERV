@@ -70,6 +70,7 @@ export declare const clientObjectInputSchema: z.ZodObject<{
     name: string;
     country: string;
     is_primary: boolean;
+    id?: string | undefined;
     object_code?: string | undefined;
     address?: string | undefined;
     city?: string | undefined;
@@ -82,9 +83,9 @@ export declare const clientObjectInputSchema: z.ZodObject<{
     access_notes?: string | undefined;
     notes?: string | undefined;
     assigned_user_id?: string | null | undefined;
-    id?: string | undefined;
 }, {
     name: string;
+    id?: string | undefined;
     object_code?: unknown;
     address?: unknown;
     city?: unknown;
@@ -99,7 +100,6 @@ export declare const clientObjectInputSchema: z.ZodObject<{
     notes?: unknown;
     is_primary?: string | number | boolean | undefined;
     assigned_user_id?: unknown;
-    id?: string | undefined;
 }>;
 export type ClientObjectInput = z.infer<typeof clientObjectInputSchema>;
 //# sourceMappingURL=clientObject.d.ts.map

@@ -49,6 +49,17 @@ const errorHandler_1 = require("../middleware/errorHandler");
 const incidentWork_1 = require("./incidentWork");
 const incidentActivity_1 = require("./incidentActivity");
 const unitActivity_1 = require("./unitActivity");
+const companySettings_1 = require("./companySettings");
+async function assertIncidentClosedForCompletion(incidentId) {
+    const row = await (0, pool_1.queryOne)(`SELECT st.category FROM incidents i
+     INNER JOIN incident_statuses st ON st.code = i.status
+     WHERE i.id = ?`, [incidentId]);
+    if (!row)
+        throw new errorHandler_1.AppError(404, 'Atgadījums nav atrasts', 'NOT_FOUND');
+    if (row.category !== 'closed') {
+        throw new errorHandler_1.AppError(400, 'Darba apstiprināšana pieejama tikai pēc statusa maiņas uz Atrisināts vai Slēgts', 'INCIDENT_NOT_CLOSED');
+    }
+}
 function uploadsDir() {
     const dir = process.env.UPLOAD_DIR ||
         path_1.default.join(process.cwd(), 'uploads', 'completion-acts');
@@ -99,6 +110,7 @@ function toPublic(row) {
     };
 }
 async function requestCompletionSignature(incidentId, staffUserId) {
+    await assertIncidentClosedForCompletion(incidentId);
     const existing = await (0, pool_1.queryOne)('SELECT * FROM incident_completion_acts WHERE incident_id = ?', [incidentId]);
     if (existing?.client_signed_at) {
         return toPublic(existing);
@@ -117,10 +129,17 @@ async function requestCompletionSignature(incidentId, staffUserId) {
     return row;
 }
 async function signCompletionAct(params) {
+    await assertIncidentClosedForCompletion(params.incidentId);
     const incident = await (0, pool_1.queryOne)('SELECT id FROM incidents WHERE id = ?', [params.incidentId]);
     if (!incident)
         throw new errorHandler_1.AppError(404, 'Atgadījums nav atrasts', 'NOT_FOUND');
-    const name = params.signerName.trim();
+    let name = params.signerName.trim();
+    if (params.portalUserId && params.signatureType === 'drawn') {
+        const portalUser = await (0, pool_1.queryOne)('SELECT full_name FROM portal_users WHERE id = ?', [params.portalUserId]);
+        if (portalUser?.full_name?.trim()) {
+            name = portalUser.full_name.trim();
+        }
+    }
     if (!name)
         throw new errorHandler_1.AppError(400, 'Norādiet parakstītāja vārdu', 'SIGNER_NAME_REQUIRED');
     if (params.signatureType === 'drawn' && !params.signatureData.startsWith('data:image/')) {
@@ -175,7 +194,8 @@ async function loadIncidentForAct(incidentId) {
             co.address AS object_address,
             u.serial_number AS unit_serial, u.unit_type, u.model AS unit_model,
             at.name AS asset_type_name,
-            au.full_name AS assigned_user_name
+            au.full_name AS assigned_user_name,
+            au.signature_data AS assigned_user_signature
      FROM incidents i
      JOIN clients c ON c.id = i.client_id
      LEFT JOIN client_objects co ON co.id = i.object_id
@@ -200,6 +220,8 @@ async function buildPdf(incident, completion, workLogs, materials) {
     const filePath = path_1.default.join(uploadsDir(), fileName);
     const regular = fontPath('DejaVuSans.ttf');
     const bold = fontPath('DejaVuSans-Bold.ttf');
+    const company = await (0, companySettings_1.getCompanySettings)();
+    const sortedWorkLogs = [...workLogs].reverse();
     await new Promise((resolve, reject) => {
         void (async () => {
             const { default: PDFDocument } = await Promise.resolve().then(() => __importStar(require('pdfkit')));
@@ -209,9 +231,15 @@ async function buildPdf(incident, completion, workLogs, materials) {
             doc.registerFont('Regular', regular);
             doc.registerFont('Bold', bold);
             const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-            doc.font('Bold').fontSize(16).text('TRIO SERV', { align: 'center' });
+            doc.font('Bold').fontSize(16).text(company.company_name || 'TRIO IT', { align: 'center' });
+            doc.font('Regular').fontSize(9);
+            for (const line of [company.header_line1, company.header_line2, company.header_line3]) {
+                if (line?.trim()) {
+                    doc.text(line.trim(), { align: 'center' });
+                }
+            }
             doc.moveDown(0.3);
-            doc.fontSize(13).text('Remonta darbu izpildes un pieņemšanas-nodošanas akts', {
+            doc.font('Bold').fontSize(13).text('Remonta darbu izpildes un pieņemšanas-nodošanas akts', {
                 align: 'center',
             });
             doc.moveDown(0.8);
@@ -235,7 +263,10 @@ async function buildPdf(incident, completion, workLogs, materials) {
                 infoRows.push(['Ierīce', device]);
             if (incident.assigned_user_name)
                 infoRows.push(['Izpildītājs', incident.assigned_user_name]);
-            infoRows.push(['Saņemts', formatLvDate(incident.received_at)]);
+            infoRows.push(['Izsaukums saņemts', formatLvDate(incident.received_at)]);
+            if (incident.completed_at) {
+                infoRows.push(['Atrisināts', formatLvDate(incident.completed_at)]);
+            }
             for (const [label, value] of infoRows) {
                 doc.font('Bold').text(`${label}: `, { continued: true });
                 doc.font('Regular').text(value || '—');
@@ -244,11 +275,11 @@ async function buildPdf(incident, completion, workLogs, materials) {
             doc.font('Bold').fontSize(11).text('1. Veiktie darbi');
             doc.moveDown(0.3);
             doc.font('Regular').fontSize(10);
-            if (workLogs.length === 0) {
+            if (sortedWorkLogs.length === 0) {
                 doc.text('Darbu žurnālā nav detalizētu ierakstu.');
             }
             else {
-                workLogs.forEach((log, index) => {
+                sortedWorkLogs.forEach((log, index) => {
                     doc.text(`${index + 1}. ${formatLvDate(log.work_date)} — ${log.description} (${formatDuration(log.duration_minutes)}${log.user_name ? `, ${log.user_name}` : ''})`);
                 });
             }
@@ -285,18 +316,26 @@ async function buildPdf(incident, completion, workLogs, materials) {
                 width: colWidth,
             });
             const sigY = yStart + 18;
-            doc.font('Regular').fontSize(9);
-            doc.text(incident.assigned_user_name || 'TRIO SERV', doc.page.margins.left, sigY, {
-                width: colWidth,
-            });
+            const executorX = doc.page.margins.left;
             const clientX = doc.page.margins.left + colWidth + 20;
-            const sigImage = parseSignatureImage(completion.signature_data);
-            if (sigImage && completion.signature_type === 'drawn') {
+            const staffSigImage = parseSignatureImage(incident.assigned_user_signature);
+            if (staffSigImage) {
                 try {
-                    doc.image(sigImage, clientX, sigY - 5, { width: 140, height: 50 });
+                    doc.image(staffSigImage, executorX, sigY - 5, { width: 140, height: 50 });
                 }
                 catch {
-                    doc.text(completion.client_signer_name || '—', clientX, sigY, { width: colWidth });
+                    /* leave blank */
+                }
+            }
+            const clientSigImage = completion.signature_type === 'drawn' ? parseSignatureImage(completion.signature_data) : null;
+            if (clientSigImage) {
+                try {
+                    doc.image(clientSigImage, clientX, sigY - 5, { width: 140, height: 50 });
+                }
+                catch {
+                    doc.font('Regular').fontSize(14).text(completion.client_signer_name || '—', clientX, sigY, {
+                        width: colWidth,
+                    });
                 }
             }
             else {
@@ -305,23 +344,20 @@ async function buildPdf(incident, completion, workLogs, materials) {
                 });
             }
             const lineY = sigY + 55;
-            doc.moveTo(doc.page.margins.left, lineY).lineTo(doc.page.margins.left + colWidth, lineY).stroke();
-            doc
-                .moveTo(clientX, lineY)
-                .lineTo(clientX + colWidth, lineY)
-                .stroke();
+            doc.moveTo(executorX, lineY).lineTo(executorX + colWidth, lineY).stroke();
+            doc.moveTo(clientX, lineY).lineTo(clientX + colWidth, lineY).stroke();
             doc.font('Regular').fontSize(8);
-            doc.text('Paraksts / vārds', doc.page.margins.left, lineY + 4, { width: colWidth });
-            doc.text('Paraksts / vārds', clientX, lineY + 4, { width: colWidth });
+            doc.text('Paraksts', executorX, lineY + 4, { width: colWidth });
+            doc.text('Paraksts', clientX, lineY + 4, { width: colWidth });
             const dateY = lineY + 20;
             doc.fontSize(9).text(`Datums: ${formatLvDate(completion.client_signed_at)}`, clientX, dateY, {
                 width: colWidth,
             });
-            doc.text(`Datums: ${formatLvDate(new Date())}`, doc.page.margins.left, dateY, {
+            doc.text(`Datums: ${formatLvDate(new Date())}`, executorX, dateY, {
                 width: colWidth,
             });
             doc.moveDown(2);
-            doc.fontSize(8).fillColor('#666666').text('Šis akts ir sagatavots elektroniski TRIO SERV sistēmā un ir derīgs bez papildu paraksta, ja ir reģistrēts klienta elektroniskais apstiprinājums.', { align: 'center' });
+            doc.fontSize(8).fillColor('#666666').text('Šis akts ir sagatavots elektroniski TRIO IT apkalpes sistēmā un ir derīgs bez papildu paraksta, ja ir reģistrēts klienta elektroniskais apstiprinājums.', { align: 'center' });
             doc.end();
             stream.on('finish', () => resolve());
             stream.on('error', reject);
