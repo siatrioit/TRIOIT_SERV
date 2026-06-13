@@ -51,6 +51,7 @@ export type WarehouseProduct = {
   min_quantity?: number | null;
   purchase_price?: number | null;
   sale_price?: number | null;
+  desired_markup_percent?: number | null;
   vat_rate?: number | null;
   is_service?: number | boolean;
   is_active: number | boolean;
@@ -144,6 +145,7 @@ export type WarehouseProductMovement = {
   reference_type?: string | null;
   reference_id?: string | null;
   reference_number?: string | null;
+  reference_status?: string | null;
   notes?: string | null;
   created_by_name?: string | null;
   created_at: string;
@@ -155,13 +157,11 @@ function docNumber(prefix: string): string {
   return `${prefix}-${date}-${rand}`;
 }
 
-async function applyProductStockChange(
+async function changeProductStockOnHand(
   conn: mysql.PoolConnection,
   productId: string,
-  delta: number,
-  movementType: 'in' | 'out',
-  opts: { referenceType?: string; referenceId?: string; notes?: string; createdBy?: string }
-): Promise<number> {
+  delta: number
+): Promise<{ after: number; isService: boolean }> {
   const row = await queryOneConn<{ quantity_on_hand: number; is_service: number }>(
     conn,
     'SELECT quantity_on_hand, is_service FROM warehouse_products WHERE id = ? AND is_active = 1 FOR UPDATE',
@@ -170,25 +170,7 @@ async function applyProductStockChange(
   if (!row) throw new AppError(404, 'Prece nav atrasta', 'NOT_FOUND');
 
   if (Number(row.is_service)) {
-    await queryConn(
-      conn,
-      `INSERT INTO warehouse_product_movements (
-        id, product_id, movement_type, quantity, quantity_after,
-        reference_type, reference_id, notes, created_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        uuidv4(),
-        productId,
-        movementType,
-        Math.abs(delta),
-        0,
-        opts.referenceType ?? null,
-        opts.referenceId ?? null,
-        opts.notes ?? null,
-        opts.createdBy ?? null,
-      ]
-    );
-    return 0;
+    return { after: 0, isService: true };
   }
 
   const after = Number(row.quantity_on_hand) + delta;
@@ -201,6 +183,18 @@ async function applyProductStockChange(
     productId,
   ]);
 
+  return { after, isService: false };
+}
+
+async function applyProductStockChange(
+  conn: mysql.PoolConnection,
+  productId: string,
+  delta: number,
+  movementType: 'in' | 'out',
+  opts: { referenceType?: string; referenceId?: string; notes?: string; createdBy?: string }
+): Promise<number> {
+  const { after, isService } = await changeProductStockOnHand(conn, productId, delta);
+
   await queryConn(
     conn,
     `INSERT INTO warehouse_product_movements (
@@ -212,7 +206,7 @@ async function applyProductStockChange(
       productId,
       movementType,
       Math.abs(delta),
-      after,
+      isService ? 0 : after,
       opts.referenceType ?? null,
       opts.referenceId ?? null,
       opts.notes ?? null,
@@ -221,6 +215,18 @@ async function applyProductStockChange(
   );
 
   return after;
+}
+
+async function deleteReceiptMovements(
+  conn: mysql.PoolConnection,
+  receiptId: string
+): Promise<void> {
+  await queryConn(
+    conn,
+    `DELETE FROM warehouse_product_movements
+     WHERE reference_type = 'receipt' AND reference_id = ?`,
+    [receiptId]
+  );
 }
 
 async function assertSupplier(clientId: string): Promise<void> {
@@ -390,8 +396,8 @@ export async function createProduct(
   await query(
     `INSERT INTO warehouse_products (
       id, group_id, sku, name, secondary_name, description, unit, min_quantity,
-      purchase_price, sale_price, vat_rate, is_service, created_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      purchase_price, sale_price, desired_markup_percent, vat_rate, is_service, created_by
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       input.group_id ?? null,
@@ -403,6 +409,7 @@ export async function createProduct(
       input.min_quantity ?? null,
       input.purchase_price ?? null,
       input.sale_price ?? null,
+      input.desired_markup_percent ?? null,
       input.vat_rate ?? 21,
       input.is_service ? 1 : 0,
       createdBy ?? null,
@@ -445,6 +452,7 @@ export async function updateProduct(id: string, input: Partial<ProductInput>): P
     'min_quantity',
     'purchase_price',
     'sale_price',
+    'desired_markup_percent',
     'vat_rate',
     'is_service',
   ] as const) {
@@ -509,7 +517,16 @@ export async function listProductMovements(opts?: {
                 SELECT document_number FROM warehouse_issues WHERE id = m.reference_id LIMIT 1
               )
               ELSE NULL
-            END AS reference_number
+            END AS reference_number,
+            CASE
+              WHEN m.reference_type = 'receipt' THEN (
+                SELECT status FROM warehouse_receipts WHERE id = m.reference_id LIMIT 1
+              )
+              WHEN m.reference_type = 'issue' THEN (
+                SELECT status FROM warehouse_issues WHERE id = m.reference_id LIMIT 1
+              )
+              ELSE NULL
+            END AS reference_status
      FROM warehouse_product_movements m
      JOIN warehouse_products p ON p.id = m.product_id
      LEFT JOIN users u ON u.id = m.created_by
@@ -792,13 +809,9 @@ export async function unpostReceipt(id: string, createdBy?: string): Promise<War
 
   await withMysqlTransaction(async (conn) => {
     for (const line of receipt.lines!) {
-      await applyProductStockChange(conn, line.product_id, -line.quantity, 'out', {
-        referenceType: 'receipt',
-        referenceId: id,
-        notes: `Atcelta saņemšana ${receipt.document_number}`,
-        createdBy,
-      });
+      await changeProductStockOnHand(conn, line.product_id, -line.quantity);
     }
+    await deleteReceiptMovements(conn, id);
     await queryConn(
       conn,
       `UPDATE warehouse_receipts SET status = 'draft', posted_at = NULL WHERE id = ?`,

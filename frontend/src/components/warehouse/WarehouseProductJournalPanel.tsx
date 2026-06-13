@@ -5,11 +5,21 @@ import {
   warehouseCommercialApi,
   type WarehouseProduct,
 } from '../../api/warehouseCommercial';
+import { formatQuantity } from '../../utils/warehousePricing';
 
 function movementLabel(type: string, referenceType?: string | null) {
-  if (type === 'in' || referenceType === 'receipt') return 'Saņemšana';
-  if (type === 'out' || referenceType === 'issue') return 'Izrakstīšana';
+  if (type === 'in' && referenceType === 'receipt') return 'Saņemšana';
+  if (type === 'out' && referenceType === 'issue') return 'Izrakstīšana';
+  if (type === 'out' && referenceType === 'receipt') return 'Saņemšanas atcelšana';
+  if (type === 'in') return 'Saņemšana';
+  if (type === 'out') return 'Izrakstīšana';
   return 'Korekcija';
+}
+
+function referenceStatusLabel(status?: string | null) {
+  if (status === 'posted') return 'Grāmatots';
+  if (status === 'draft') return 'Melnraksts';
+  return null;
 }
 
 function formatDateTime(value: string) {
@@ -146,7 +156,7 @@ export function WarehouseProductJournalPanel({ active = true }: Props) {
                           <span className="text-gray-400">—</span>
                         ) : (
                           <span className={low ? 'text-amber-700 font-medium' : 'text-gray-900'}>
-                            {p.quantity_on_hand} {p.unit}
+                            {formatQuantity(p.quantity_on_hand)} {p.unit}
                           </span>
                         )}
                       </td>
@@ -212,6 +222,10 @@ export function WarehouseProductJournalPanel({ active = true }: Props) {
                 {movements.map((m) => {
                   const isService = isProductService(m);
                   const sign = m.movement_type === 'out' ? '−' : '+';
+                  const opLabel = movementLabel(m.movement_type, m.reference_type);
+                  const docStatus = referenceStatusLabel(m.reference_status);
+                  const isUnpost =
+                    m.movement_type === 'out' && m.reference_type === 'receipt';
                   return (
                     <tr key={m.id} className="border-t border-gray-100">
                       <td className="px-3 py-2 text-gray-600 whitespace-nowrap">
@@ -228,23 +242,30 @@ export function WarehouseProductJournalPanel({ active = true }: Props) {
                           className={`text-xs px-2 py-0.5 rounded-full ${
                             m.movement_type === 'in'
                               ? 'bg-green-50 text-green-800'
-                              : m.movement_type === 'out'
-                                ? 'bg-blue-50 text-blue-800'
-                                : 'bg-gray-100 text-gray-700'
+                              : isUnpost
+                                ? 'bg-amber-50 text-amber-800'
+                                : m.movement_type === 'out'
+                                  ? 'bg-blue-50 text-blue-800'
+                                  : 'bg-gray-100 text-gray-700'
                           }`}
                         >
-                          {movementLabel(m.movement_type, m.reference_type)}
+                          {opLabel}
                         </span>
                       </td>
                       <td className="px-3 py-2 text-gray-600">
-                        {m.reference_number || m.notes || '—'}
+                        <div>
+                          {m.reference_number || m.notes || '—'}
+                          {docStatus && (
+                            <span className="block text-xs text-gray-400 mt-0.5">{docStatus}</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2 text-right font-medium">
                         {sign}
-                        {m.quantity} {m.product_unit}
+                        {formatQuantity(m.quantity)} {m.product_unit}
                       </td>
                       <td className="px-3 py-2 text-right text-gray-600">
-                        {isService ? '—' : `${m.quantity_after} ${m.product_unit}`}
+                        {isService ? '—' : `${formatQuantity(m.quantity_after)} ${m.product_unit}`}
                       </td>
                     </tr>
                   );

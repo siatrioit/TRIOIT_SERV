@@ -9,6 +9,7 @@ import {
   type WaybillLine,
 } from '../../api/warehouseCommercial';
 import { Modal } from '../../components/ui/Modal';
+import { formatMoney, formatQuantity } from '../../utils/warehousePricing';
 
 function flag(v: unknown) {
   return v === true || v === 1 || v === '1';
@@ -17,10 +18,6 @@ function flag(v: unknown) {
 type LineDraft = { product_id: string; quantity: string; unit_price: string };
 
 const emptyLine = (): LineDraft => ({ product_id: '', quantity: '1', unit_price: '' });
-
-function formatMoney(value: number) {
-  return value.toLocaleString('lv-LV', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 function lineTotal(line: WaybillLine) {
   if (line.unit_price == null) return null;
@@ -260,7 +257,7 @@ function IssueDetailModal({
                   <tr key={l.id} className="border-t border-gray-100">
                     <td className="px-3 py-2">{l.product_name}</td>
                     <td className="px-3 py-2 text-gray-600">{l.product_unit ?? 'gab.'}</td>
-                    <td className="px-3 py-2 text-right">{l.quantity}</td>
+                    <td className="px-3 py-2 text-right">{formatQuantity(l.quantity)}</td>
                     <td className="px-3 py-2 text-right">
                       {l.unit_price != null ? formatMoney(Number(l.unit_price)) : '—'}
                     </td>
@@ -353,7 +350,7 @@ function IssueCreateModal({
         Number(line.quantity) > Number(product.quantity_on_hand)
       ) {
         setError(
-          `Nepietiekams atlikums: ${product.name} (pieejams ${product.quantity_on_hand} ${product.unit})`
+          `Nepietiekams atlikums: ${product.name} (pieejams ${formatQuantity(product.quantity_on_hand)} ${product.unit})`
         );
         return;
       }
@@ -509,7 +506,7 @@ function IssueCreateModal({
                         {p.name}
                         {isProductService(p)
                           ? ' (pakalpojums)'
-                          : ` (atlikums: ${p.quantity_on_hand} ${p.unit})`}
+                          : ` (atlikums: ${formatQuantity(p.quantity_on_hand)} ${p.unit})`}
                       </option>
                     ))}
                   </select>
@@ -536,7 +533,7 @@ function IssueCreateModal({
                 </div>
                 {overStock && (
                   <p className="text-xs text-amber-700 px-1">
-                    Pārsniedz atlikumu ({product!.quantity_on_hand} {product!.unit})
+                    Pārsniedz atlikumu ({formatQuantity(product!.quantity_on_hand)} {product!.unit})
                   </p>
                 )}
               </div>

@@ -8,7 +8,7 @@ import {
   type WarehouseProduct,
   type WarehouseProductGroup,
 } from '../../api/warehouseCommercial';
-import { calcProductMarkup } from '../../utils/warehousePricing';
+import { calcProductMarkup, formatQuantity } from '../../utils/warehousePricing';
 import {
   postReceiptProductPick,
   storeReceiptProductPick,
@@ -442,7 +442,7 @@ export function WarehouseProductsPage() {
                   <p className="text-xs text-gray-500 mt-0.5">
                     {p.group_path || 'Bez grupas'}
                     {p.sku ? ` · ${p.sku}` : ''}
-                    {isProductService(p) ? '' : ` · Atlikums: ${p.quantity_on_hand} ${p.unit}`}
+                    {isProductService(p) ? '' : ` · Atlikums: ${formatQuantity(p.quantity_on_hand)} ${p.unit}`}
                   </p>
                 </button>
                 {pickForReceipt && (
@@ -508,6 +508,9 @@ function ProductModal({
   const [salePrice, setSalePrice] = useState(
     initial?.sale_price != null ? String(initial.sale_price) : ''
   );
+  const [desiredMarkup, setDesiredMarkup] = useState(
+    initial?.desired_markup_percent != null ? String(initial.desired_markup_percent) : ''
+  );
   const [isService, setIsService] = useState(isProductService(initial));
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -538,6 +541,7 @@ function ProductModal({
         vat_rate: vatRate ? Number(vatRate) : 21,
         purchase_price: purchasePrice ? Number(purchasePrice) : null,
         sale_price: salePrice ? Number(salePrice) : null,
+        desired_markup_percent: desiredMarkup ? Number(desiredMarkup) : null,
         is_service: isService,
       };
       if (initial) {
@@ -647,12 +651,23 @@ function ProductModal({
           title="Atjauninās, grāmatojot saņemšanas pavadzīmi"
         />
         <div className="input-field bg-gray-50 text-gray-600 flex items-center text-sm">
-          Piecenojums: {markupPercent != null ? `${markupPercent}%` : '—'}
+          Faktiskais piecenojums: {markupPercent != null ? `${formatQuantity(markupPercent)}%` : '—'}
           <span className="text-[10px] text-gray-400 ml-1">(pēc PVN)</span>
         </div>
+        <input
+          className="input-field input-number"
+          placeholder="Vēlamais piecenojums %"
+          type="number"
+          step="0.01"
+          value={desiredMarkup}
+          onChange={(e) => setDesiredMarkup(e.target.value)}
+        />
+        <p className="text-xs text-gray-500 -mt-1">
+          Tiek izmantots saņemšanas pavadzīmē, ja piecenojums vēl nav aprēķināts no cenām.
+        </p>
         <div className="grid grid-cols-2 gap-2">
           <input
-            className="input-field"
+            className="input-field input-number"
             placeholder="Pārdošanas cena ar PVN"
             type="number"
             step="0.01"
@@ -661,7 +676,7 @@ function ProductModal({
           />
           {!isService && initial && (
             <div className="input-field bg-gray-50 text-gray-600 flex items-center text-sm">
-              Atlikums: {initial.quantity_on_hand} {initial.unit}
+              Atlikums: {formatQuantity(initial.quantity_on_hand)} {initial.unit}
             </div>
           )}
         </div>

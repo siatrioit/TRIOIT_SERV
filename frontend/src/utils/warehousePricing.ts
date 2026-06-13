@@ -102,3 +102,18 @@ export function paymentStatusLabel(status: PaymentStatus): string {
   if (status === 'partial') return 'Daļēji apmaksāta';
   return 'Nav apmaksāta';
 }
+
+export function formatMoney(value: number | string | null | undefined): string {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+  return n.toLocaleString('lv-LV', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+export function formatQuantity(value: number | string | null | undefined, decimals = 2): string {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+  return n.toLocaleString('lv-LV', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}

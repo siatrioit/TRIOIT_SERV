@@ -14,6 +14,8 @@ import {
   calcMarkupPercentFromSaleInc,
   calcReceiptTotals,
   calcSaleIncFromMarkup,
+  formatMoney,
+  formatQuantity,
   paymentStatusLabel,
   purchaseUnitIncVat,
   roundMoney,
@@ -26,10 +28,6 @@ import {
 
 function flag(v: unknown) {
   return v === true || v === 1 || v === '1';
-}
-
-function formatMoney(value: number) {
-  return value.toLocaleString('lv-LV', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 /** Vērtība HTML date input laukam (YYYY-MM-DD) */
@@ -95,6 +93,7 @@ type LineDraft = {
   markup_percent: string;
   sale_price: string;
   vat_rate: number;
+  desired_markup_percent?: number | null;
 };
 
 const emptyLine = (): LineDraft => ({
@@ -104,6 +103,7 @@ const emptyLine = (): LineDraft => ({
   markup_percent: '',
   sale_price: '',
   vat_rate: 21,
+  desired_markup_percent: null,
 });
 
 function lineDraftFromReceipt(line: ReceiptLine): LineDraft {
@@ -607,13 +607,21 @@ function ReceiptLinesEditor({
   const onPurchaseChange = (idx: number, purchase: string) => {
     const line = lines[idx];
     const purchaseNum = Number(purchase);
-    const vat = line.vat_rate;
+    const saleNum = Number(line.sale_price);
     const next: Partial<LineDraft> = { purchase_price: purchase };
-    if (line.markup_percent && Number.isFinite(purchaseNum) && purchaseNum > 0) {
-      next.sale_price = String(
-        calcSaleIncFromMarkup(purchaseNum, Number(line.markup_percent), vat)
-      );
+
+    if (Number.isFinite(purchaseNum) && purchaseNum > 0) {
+      if (line.sale_price && Number.isFinite(saleNum)) {
+        const markup = calcMarkupPercentFromSaleInc(purchaseNum, saleNum, line.vat_rate);
+        next.markup_percent = markup != null ? String(markup) : '';
+      } else if (line.desired_markup_percent != null) {
+        next.markup_percent = String(line.desired_markup_percent);
+        next.sale_price = String(
+          calcSaleIncFromMarkup(purchaseNum, line.desired_markup_percent, line.vat_rate)
+        );
+      }
     }
+
     updateLine(idx, next);
   };
 
@@ -649,6 +657,10 @@ function ReceiptLinesEditor({
     }));
   const totals = calcReceiptTotals(pricingLines);
 
+  const numInput = 'input-field input-number !py-2 !px-2 text-sm w-full min-w-0';
+  const numCol = 'w-[5.75rem] shrink-0';
+  const hintRow = 'h-[14px] text-[10px] text-gray-400 leading-[14px] truncate px-0.5';
+
   return (
     <div className="space-y-3">
       <p className="text-xs text-gray-500 hidden lg:block">
@@ -657,14 +669,14 @@ function ReceiptLinesEditor({
       </p>
 
       {lines.length > 0 && (
-        <div className="hidden lg:grid lg:grid-cols-12 gap-2 text-xs font-medium text-gray-500 px-1">
-          <span className="col-span-4">Prece</span>
-          <span className="col-span-1">Daudz.</span>
-          <span className="col-span-2">Iepirkums bez PVN</span>
-          <span className="col-span-1">Piec. %</span>
-          <span className="col-span-2">Pārdošana ar PVN</span>
-          <span className="col-span-1">PVN</span>
-          <span className="col-span-1" />
+        <div className="hidden lg:flex gap-2 text-xs font-medium text-gray-500 px-1">
+          <span className="flex-1 min-w-0">Prece</span>
+          <span className={`${numCol} text-right`}>Daudz.</span>
+          <span className={`${numCol} text-right`}>Iepirkums bez PVN</span>
+          <span className={`${numCol} text-right`}>Piec. %</span>
+          <span className={`${numCol} text-right`}>Pārdošana ar PVN</span>
+          <span className="w-12 shrink-0 text-right">PVN</span>
+          <span className="w-14 shrink-0" />
         </div>
       )}
 
@@ -675,10 +687,16 @@ function ReceiptLinesEditor({
           Number.isFinite(purchaseNum) && purchaseNum > 0
             ? purchaseUnitIncVat(purchaseNum, line.vat_rate)
             : null;
+        const desiredMarkup =
+          line.desired_markup_percent ??
+          (product?.desired_markup_percent != null
+            ? Number(product.desired_markup_percent)
+            : null);
+
         return (
-          <div key={idx} className="rounded-xl border border-gray-100 p-3 lg:p-2 space-y-2 lg:space-y-0">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-2 items-start lg:items-center">
-              <div className="lg:col-span-4 flex gap-2">
+          <div key={idx} className="rounded-xl border border-gray-100 p-3 lg:border-0 lg:p-0 lg:rounded-none">
+            <div className="flex flex-col lg:flex-row gap-2 lg:gap-2 lg:items-start">
+              <div className="flex gap-2 lg:flex-1 lg:min-w-0">
                 <button
                   type="button"
                   className="btn-secondary !py-1.5 !px-3 !min-h-0 text-sm flex-1 text-left truncate"
@@ -694,54 +712,77 @@ function ReceiptLinesEditor({
                   Noņemt
                 </button>
               </div>
-              <input
-                className="input-field lg:col-span-1"
-                type="number"
-                min="0"
-                step="0.001"
-                placeholder="Daudz."
-                value={line.quantity}
-                onChange={(e) => updateLine(idx, { quantity: e.target.value })}
-              />
-              <div className="lg:col-span-2 space-y-0.5">
+
+              <div className={`${numCol} max-lg:w-full`}>
                 <input
-                  className="input-field"
+                  className={numInput}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Daudz."
+                  value={line.quantity}
+                  onChange={(e) => updateLine(idx, { quantity: e.target.value })}
+                />
+              </div>
+
+              <div className={`${numCol} max-lg:w-full`}>
+                <input
+                  className={numInput}
                   type="number"
                   step="0.01"
-                  placeholder="Iepirkums bez PVN"
+                  placeholder="Iepirkums"
                   value={line.purchase_price}
                   onChange={(e) => onPurchaseChange(idx, e.target.value)}
                 />
-                {purchaseIncHint != null && (
-                  <p className="text-[10px] text-gray-400 lg:px-1">ar PVN: {formatMoney(purchaseIncHint)}</p>
-                )}
+                <div className={hintRow}>
+                  {purchaseIncHint != null ? `ar PVN: ${formatMoney(purchaseIncHint)}` : ''}
+                </div>
               </div>
-              <input
-                className="input-field lg:col-span-1"
-                type="number"
-                step="0.01"
-                placeholder="Piec. %"
-                value={line.markup_percent}
-                onChange={(e) => onMarkupChange(idx, e.target.value)}
-              />
-              <input
-                className="input-field lg:col-span-2"
-                type="number"
-                step="0.01"
-                placeholder="Pārdošana ar PVN"
-                value={line.sale_price}
-                onChange={(e) => onSaleChange(idx, e.target.value)}
-              />
-              <div className="input-field bg-gray-50 text-gray-600 flex items-center text-sm lg:col-span-1">
-                {line.vat_rate}%
+
+              <div className={`${numCol} max-lg:w-full`}>
+                <input
+                  className={numInput}
+                  type="number"
+                  step="0.01"
+                  placeholder="Piec. %"
+                  value={line.markup_percent}
+                  onChange={(e) => onMarkupChange(idx, e.target.value)}
+                />
+                <div className={hintRow}>
+                  {desiredMarkup != null ? `Vēlamais: ${formatQuantity(desiredMarkup)}%` : ''}
+                </div>
               </div>
+
+              <div className={`${numCol} max-lg:w-full`}>
+                <input
+                  className={numInput}
+                  type="number"
+                  step="0.01"
+                  placeholder="Pārdošana"
+                  value={line.sale_price}
+                  onChange={(e) => onSaleChange(idx, e.target.value)}
+                />
+                <div className={hintRow} />
+              </div>
+
+              <div className="w-12 shrink-0 max-lg:hidden">
+                <div className={`${numInput} bg-gray-50 text-gray-600 flex items-center justify-end !px-2`}>
+                  {line.vat_rate}%
+                </div>
+                <div className={hintRow} />
+              </div>
+
               <button
                 type="button"
-                className="hidden lg:block text-sm text-primary-600 font-medium lg:col-span-1 text-right"
+                className="hidden lg:block text-sm text-primary-600 font-medium w-14 shrink-0 text-right pt-2"
                 onClick={() => onChange(lines.filter((_, i) => i !== idx))}
               >
                 Noņemt
               </button>
+
+              <div className="lg:hidden flex items-center gap-2 text-sm text-gray-600">
+                <span>PVN: {line.vat_rate}%</span>
+              </div>
             </div>
           </div>
         );
@@ -1067,7 +1108,7 @@ function ReceiptViewModal({
                 <tr key={l.id} className="border-t border-gray-100">
                   <td className="px-3 py-2">{l.product_name}</td>
                   <td className="px-3 py-2 text-right">
-                    {l.quantity} {l.product_unit}
+                    {formatQuantity(l.quantity)} {l.product_unit}
                   </td>
                   <td className="px-3 py-2 text-right">
                     {l.unit_price != null ? formatMoney(Number(l.unit_price)) : '—'}

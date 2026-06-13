@@ -60,6 +60,8 @@ export interface WarehouseProduct {
 
   sale_price?: number | null;
 
+  desired_markup_percent?: number | null;
+
   vat_rate?: number | null;
 
   is_service?: boolean | number;
@@ -91,6 +93,8 @@ export interface WarehouseProductMovement {
   reference_id?: string | null;
 
   reference_number?: string | null;
+
+  reference_status?: string | null;
 
   notes?: string | null;
 
